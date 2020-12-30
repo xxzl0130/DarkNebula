@@ -4,9 +4,7 @@
 #include "DarkNebulaGlobal.h"
 namespace dn
 {
-	// 显式实例化导出
 	typedef std::function<void(void)> TimerCallback;
-	template class DN_EXPORT std::function<void(void)>;
 	
 	// 高精度定时器类，使用windows多媒体定时器实现，只实现循环定时器。
 	class DN_EXPORT Timer
