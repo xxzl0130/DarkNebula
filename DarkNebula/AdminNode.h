@@ -3,7 +3,9 @@
 #include <string>
 #include <vector>
 #include <map>
+#include <atomic>
 #include <cstdint>
+#include <mutex>
 #include "Timer.h"
 
 namespace std
@@ -170,11 +172,13 @@ namespace dn
 		// 监听线程
 		std::thread* listenThread_;
 		// 监听线程停止标志
-		bool listenStop_,listenStopped_;
+		std::atomic_bool listenStop_;
 		// 缓冲区
 		char* inBuffer, *outBuffer;
 		// 缓冲区大小
 		size_t bufferSize_;
+		// 监听锁
+		std::mutex listenMutex_;
 
 		// 当前仿真时间
 		double curTime_;

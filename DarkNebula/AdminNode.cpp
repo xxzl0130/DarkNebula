@@ -2,6 +2,7 @@
 
 #include <cassert>
 #include <functional>
+#include <iostream>
 #include <zmq.h>
 #include <sstream>
 #include <thread>
@@ -17,7 +18,6 @@ dn::AdminNode::AdminNode(uint16_t receivePort, uint16_t sendPort):
 	socketContext_(zmq_ctx_new()),
 	listenThread_(nullptr),
 	listenStop_(false),
-	listenStopped_(false),
 	inBuffer(nullptr),
 	outBuffer(nullptr),
 	curTime_(0),
@@ -45,7 +45,7 @@ dn::AdminNode::~AdminNode()
 
 void dn::AdminNode::setReceivePort(uint16_t port)
 {
-	if (port == receivePort_ || simState_ == SimRun || simState_ == SimPause)
+	if (simState_ != SimNop && (port == receivePort_ || simState_ == SimRun || simState_ == SimPause))
 		return;
 	stopListen();
 	receivePort_ = port;
@@ -57,12 +57,13 @@ void dn::AdminNode::setReceivePort(uint16_t port)
 	std::stringstream ss;
 	ss << "tcp://*:" << receivePort_;
 	assert(zmq_bind(subSocket_, ss.str().c_str()) == 0);
+	zmq_setsockopt(subSocket_, ZMQ_SUBSCRIBE, REPLY_TOPIC, strlen(REPLY_TOPIC));
 	startListen();
 }
 
 void dn::AdminNode::setSendPort(uint16_t port)
 {
-	if (port == sendPort_ || simState_ == SimRun || simState_ == SimPause)
+	if (simState_ != SimNop && (port == receivePort_ || simState_ == SimRun || simState_ == SimPause))
 		return;
 	stopListen();
 	sendPort_ = port;
@@ -216,10 +217,7 @@ void dn::AdminNode::startListen()
 void dn::AdminNode::stopListen()
 {
 	listenStop_ = true;
-	while(!listenStopped_)
-	{
-		std::this_thread::yield();
-	}
+	std::unique_lock<std::mutex> lock(listenMutex_);
 	delete listenThread_;
 	listenThread_ = nullptr;
 	listenStop_ = false;
@@ -227,12 +225,16 @@ void dn::AdminNode::stopListen()
 
 void dn::AdminNode::listen()
 {
-	listenStopped_ = false;
+	std::unique_lock<std::mutex> lock(listenMutex_);
+	if (!subSocket_)
+	{
+		return;
+	}
 	zmq_pollitem_t pollitem{ subSocket_,0,ZMQ_POLLIN };
 	while(!listenStop_)
 	{
-		auto item = zmq_poll(&pollitem, 1, 0);
-		if(item >= 0)
+		auto item = zmq_poll(&pollitem, 1, 1);
+		if(item > 0)
 		{
 			auto len = zmq_recv(subSocket_, inBuffer, bufferSize_, ZMQ_DONTWAIT);
 			if(len <= 0)
@@ -263,12 +265,11 @@ void dn::AdminNode::listen()
 			}
 		}
 	}
-	listenStopped_ = true;
 }
 
 void dn::AdminNode::sendMsg(void* buffer, size_t len)
 {
-	zmq_send(pubSocket_, COMMAND_TOPIC, strlen(COMMAND_TOPIC), 0);
+	zmq_send(pubSocket_, COMMAND_TOPIC, strlen(COMMAND_TOPIC), ZMQ_SNDMORE);
 	zmq_send(pubSocket_, buffer, len, 0);
 }
 
