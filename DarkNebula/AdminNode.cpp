@@ -14,9 +14,10 @@ dn::AdminNode::AdminNode(uint16_t receivePort, uint16_t sendPort):
 	listenThread_(nullptr),
 	listenStop_(false),
 	listenStopped_(false),
-	buffer(nullptr)
+	inBuffer(nullptr),
+	outBuffer(nullptr)
 {
-	setBufferSize(4 * 1024 * 1024);
+	setBufferSize(1 * 1024 * 1024);
 	setReceivePort(receivePort);
 	setSendPort(sendPort);
 }
@@ -27,7 +28,8 @@ dn::AdminNode::~AdminNode()
 	zmq_close(pubSocket_);
 	zmq_close(subSocket_);
 	zmq_ctx_destroy(socketContext_);
-	delete[] buffer;
+	delete[] inBuffer;
+	delete[] outBuffer;
 }
 
 void dn::AdminNode::setReceivePort(uint16_t port)
@@ -68,9 +70,14 @@ void dn::AdminNode::setBufferSize(size_t bytes)
 {
 	if(bytes == bufferSize_)
 		return;
+	assert(bytes >= sizeof CommandHeader);
 	stopListen();
-	delete[] buffer;
-	buffer = new char[bytes];
+	delete[] inBuffer;
+	inBuffer = new char[bytes];
+	memset(inBuffer, 0, bytes);
+	delete[] outBuffer;
+	outBuffer = new char[bytes];
+	memset(outBuffer, 0, bytes);
 	bufferSize_ = bytes;
 	startListen();
 }
@@ -110,4 +117,25 @@ void dn::AdminNode::listen()
 		}
 	}
 	listenStopped_ = true;
+}
+
+void dn::AdminNode::sendMsg(void* buffer, size_t len)
+{
+	zmq_send(pubSocket_, COMMAND_TOPIC, strlen(COMMAND_TOPIC), 0);
+	zmq_send(pubSocket_, buffer, len, 0);
+}
+
+void dn::AdminNode::sendCommand(int id, int code, size_t size, void const* data)
+{
+	memset(outBuffer, 0, bufferSize_);
+	auto* header = reinterpret_cast<CommandHeader*>(outBuffer);
+	header->ID = id;
+	header->code = code;
+	header->size = size;
+	if(size && data)
+	{
+		assert(size <= bufferSize_ - sizeof CommandHeader);
+		memcpy_s(outBuffer + sizeof CommandHeader, size, data, size);
+	}
+	sendMsg(outBuffer, size + sizeof CommandHeader);
 }
