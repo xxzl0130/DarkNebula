@@ -305,7 +305,8 @@ void dn::AdminNode::nodeReg(char* buffer, int len)
 	if(nodeMap_.count(name) < 1)
 	{
 		nodeMap_.insert(std::make_pair(name, id = nodeMap_.size()));
-		nodeList_.emplace_back(name);
+		nodeList_.emplace_back();
+		nodeList_[id].name = name;
 	}
 	else
 	{
