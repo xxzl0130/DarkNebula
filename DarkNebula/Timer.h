@@ -22,6 +22,8 @@ namespace dn
 
 		void stop();
 
+		bool isRunning() const;
+
 	private:
 		static void __stdcall timerProc(unsigned uID, unsigned uMsg, DWORD_PTR dwUser, DWORD dw1, DWORD dw2);
 		

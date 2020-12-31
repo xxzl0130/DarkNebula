@@ -38,6 +38,11 @@ void dn::Timer::stop()
 	}
 }
 
+bool dn::Timer::isRunning() const
+{
+	return timerID_ != 0;
+}
+
 void dn::Timer::timerProc(unsigned uID, unsigned uMsg, DWORD_PTR dwUser, DWORD dw1, DWORD dw2)
 {
 	auto *timer = reinterpret_cast<Timer*>(dwUser);
