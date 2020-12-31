@@ -20,17 +20,20 @@ dn::AdminNode::AdminNode(uint16_t receivePort, uint16_t sendPort):
 	listenStop_(false),
 	inBuffer(nullptr),
 	outBuffer(nullptr),
+	simSteps_(0),
 	curTime_(0),
 	simTime_(10),
-	simSteps_(0),
 	simFree_(false),
 	simReplay_(false),
-	stepTime_(10)
+	stepTime_(10),
+	curStepTime_(0.0),
+	simSpeed_(1.0)
 {
 	setBufferSize(1 * 1024 * 1024);
 	setReceivePort(receivePort);
 	setSendPort(sendPort);
 	timer_.setCallback([this]() {timerEvent(); });
+	timer_.setInterval(1);
 }
 
 dn::AdminNode::~AdminNode()
@@ -140,18 +143,44 @@ void dn::AdminNode::setReply(int node, bool enable, char const* name)
 	//TODO
 }
 
+void dn::AdminNode::setSimSpeed(double speed)
+{
+	if(speed <= 0.0)
+		return;
+	simSpeed_ = speed;
+}
+
 void dn::AdminNode::initSim()
 {
 	if(simState_ != SimNop && simState_ != SimInit && simState_ != SimStop)
 		return;
-	sendCommand(ALL_NODE, COMMAND_INIT);
 	simState_ = SimInit;
 	simReplay_ = true;
-	// 所有节点都是重放状态才是重放
-	for(const auto& it : nodeList_)
+	// 把各种信息打到json里发布
+	json info;
+	auto nodes = json::array();
+	auto chunks = json::array();
+	for(auto i = 0ull;i < nodeList_.size();++i)
 	{
-		simReplay_ = simReplay_ && it.replay;
+		json obj;
+		obj["name"] = nodeList_[i].name;
+		obj["id"] = i;
+		nodes.push_back(obj);
+		// 所有节点都是重放状态才是重放
+		simReplay_ = simReplay_ && nodeList_[i].replay;
 	}
+	for(auto i = 0ull;i < chunkList_.size();++i)
+	{
+		json obj;
+		obj["name"] = chunkList_[i].first;
+		obj["path"] = chunkList_[i].second;
+		obj["id"] = i;
+		chunks.push_back(obj);
+	}
+	info["nodes"] = nodes;
+	info["chunks"] = chunks;
+	auto jsonStr = info.dump();
+	sendCommand(ALL_NODE, COMMAND_INIT,jsonStr.size(),jsonStr.c_str());
 	curTime_ = 0.0;
 	simSteps_ = 0;
 }
@@ -163,8 +192,12 @@ void dn::AdminNode::startSim()
 		return;
 	if (checkInit())
 	{
-		sendCommand(ALL_NODE, COMMAND_START);
+		simSteps_ = 0;
+		curTime_ = 0.0;
+		curStepTime_ = 0.0;
+		sendCommand(ALL_NODE, COMMAND_START,sizeof curTime_ + sizeof simSteps_, &simSteps_);
 		simState_ = SimRun;
+		timer_.start();
 	}
 }
 
@@ -172,7 +205,7 @@ void dn::AdminNode::pauseSim()
 {
 	if(simState_ != SimRun)
 		return;
-	sendCommand(ALL_NODE, COMMAND_PAUSE);
+	sendCommand(ALL_NODE, COMMAND_PAUSE, sizeof curTime_ + sizeof simSteps_, &simSteps_);
 	simState_ = SimPause;
 }
 
@@ -182,7 +215,7 @@ void dn::AdminNode::stopSim()
 	{
 		return;
 	}
-	sendCommand(ALL_NODE, COMMAND_STOP);
+	sendCommand(ALL_NODE, COMMAND_STOP, sizeof curTime_ + sizeof simSteps_, &simSteps_);
 	simState_ = SimStop;
 }
 
@@ -190,7 +223,7 @@ void dn::AdminNode::stepForward()
 {
 	if(simState_ != SimPause && simState_ != SimStep)
 		return;
-	sendCommand(ALL_NODE, COMMAND_STEP_FORWARD);
+	stepAdvance();
 	simState_ = SimStep;
 }
 
@@ -198,9 +231,13 @@ void dn::AdminNode::stepBackward()
 {
 	if (simState_ != SimPause && simState_ != SimStep)
 		return;
-	if(!simReplay_)	// 只有重放模式可以
+	if (!simReplay_)	// 只有重放模式可以
 		return;
-	sendCommand(ALL_NODE, COMMAND_STEP_BACKWARD);
+	if (simSteps_ <= 0)
+		return;
+	--simSteps_;
+	curTime_ = static_cast<double>(simSteps_) * stepTime_ / 1000.0;
+	sendCommand(ALL_NODE, COMMAND_STEP_BACKWARD, sizeof curTime_ + sizeof simSteps_, &simSteps_);
 	simState_ = SimStep;
 }
 
@@ -282,16 +319,32 @@ void dn::AdminNode::sendCommand(int id, int code, size_t size, void const* data)
 	header->size = size;
 	if(size && data)
 	{
-		assert(size <= bufferSize_ - sizeof CommandHeader);
+		if (size > bufferSize_ - sizeof CommandHeader)
+			setBufferSize(size * 2);
 		memcpy_s(outBuffer + sizeof CommandHeader, size, data, size);
 	}
 	sendMsg(outBuffer, size + sizeof CommandHeader);
+}
+
+void dn::AdminNode::stepAdvance()
+{
+	++simSteps_;
+	curTime_ = static_cast<double>(simSteps_) * stepTime_ / 1000.0;
+	sendCommand(ALL_NODE, COMMAND_STEP_FORWARD, sizeof curTime_ + sizeof simSteps_, &simSteps_);
 }
 
 bool dn::AdminNode::checkInit()
 {
 	for (const auto& it : nodeList_)
 		if (!it.init)
+			return false;
+	return true;
+}
+
+bool dn::AdminNode::checkStep()
+{
+	for (const auto& it : nodeList_)
+		if (it.steps != simSteps_)
 			return false;
 	return true;
 }
@@ -343,17 +396,59 @@ void dn::AdminNode::nodeReg(char* buffer, int len)
 			nodeList_[id].chunks.emplace_back(chunkID, own);
 		}
 	}
+	if (registerCallback_)
+		registerCallback_(id);
 }
 
 void dn::AdminNode::nodeInit(char* buffer, int len)
 {
+	auto* header = reinterpret_cast<CommandHeader*>(buffer);
+	bool ok = false;
+	if(header->size)
+	{
+		ok = *reinterpret_cast<bool*>(buffer + sizeof CommandHeader + 1);
+	}
+	if(header->ID < nodeList_.size())
+	{
+		nodeList_[header->ID].init = ok;
+		if (initCallback_)
+		{
+			initCallback_(header->ID);
+			if(checkInit())
+				initCallback_(ALL_NODE);
+		}
+	}
 }
 
 void dn::AdminNode::nodeStep(char* buffer, int len)
 {
+	auto* header = reinterpret_cast<CommandHeader*>(buffer);
+	int step = 0;
+	if (header->size)
+	{
+		step = *reinterpret_cast<int*>(buffer + sizeof CommandHeader + 1);
+	}
+	if (header->ID < nodeList_.size())
+	{
+		nodeList_[header->ID].steps = step;
+		if (advanceCallback_)
+		{
+			advanceCallback_(header->ID);
+			if (checkStep())
+				advanceCallback_(ALL_NODE);
+		}
+	}
 }
 
 void dn::AdminNode::timerEvent()
 {
-	// TODO
+	curStepTime_ += simSpeed_;
+	// 达到仿真时间
+	if(curStepTime_ >= stepTime_)
+	{
+		if (!checkStep())
+			return;
+		curStepTime_ = 0.0;
+		stepAdvance();
+	}
 }

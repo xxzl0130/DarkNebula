@@ -6,6 +6,7 @@
 #include <atomic>
 #include <cstdint>
 #include <mutex>
+#include <functional>
 #include "Timer.h"
 
 namespace std
@@ -20,6 +21,9 @@ namespace dn
 
 	// 每个节点包含的数据块的信息，编号和所有权
 	typedef std::pair<int, bool> NodeChunks;
+
+	// 回调函数，参数为节点/Chunk编号
+	typedef std::function<void(int)> AdminCallback;
 
 	struct DN_EXPORT NodeInfo
 	{
@@ -91,7 +95,7 @@ namespace dn
 		// 获取当前仿真时间
 		double getCurTime() const { return curTime_; }
 		// 获取当前仿真步数
-		int getCurSteps() const { return simSteps_; }
+		unsigned getCurSteps() const { return simSteps_; }
 		// 清除所有已经注册的节点信息
 		void clear();
 
@@ -112,6 +116,8 @@ namespace dn
 		 * \param name 启用时需要提供保存的文件名
 		 */
 		void setReply(int node, bool enable, char const* name = nullptr);
+		// 设置仿真速度，实时为1
+		void setSimSpeed(double speed = 1);
 
 		/// 仿真命令
 		// 初始化仿真
@@ -122,10 +128,18 @@ namespace dn
 		void pauseSim();
 		// 停止仿真
 		void stopSim();
-		// 单步推进
+		// 手动单步推进
 		void stepForward();
-		// 单步后退
+		// 手动单步后退
 		void stepBackward();
+
+		/// 回调函数
+		// 初始化完成
+		void onInitOver(AdminCallback callback) { initCallback_ = std::move(callback); }
+		// 注册
+		void onRegister(AdminCallback callback) { registerCallback_ = std::move(callback); }
+		// 推进
+		void onAdvance(AdminCallback callback) { advanceCallback_ = std::move(callback); }
 
 	private:
 		// 开始监听
@@ -139,15 +153,20 @@ namespace dn
 		// 发送命令，在outBuffer的0处制作
 		void sendCommand(int id, int code, size_t size = 0, void const* data = nullptr);
 
+		// 前进一步，手动或者自动的
+		void stepAdvance();
+
 		// 检查所有节点初始化是否完成
 		bool checkInit();
+		// 检查所有节点推进是否完成
+		bool checkStep();
 		// 处理节点注册
 		void nodeReg(char* buffer, int len);
 		// 处理节点初始化
 		void nodeInit(char* buffer, int len);
 		// 处理节点推进
 		void nodeStep(char* buffer, int len);
-
+		// 定时事件
 		void timerEvent();
 		
 	private:
@@ -180,22 +199,30 @@ namespace dn
 		// 监听锁
 		std::mutex listenMutex_;
 
+		/// 步数和时间会合并发送，在这里的结构不能改
+		// 仿真步数
+		unsigned simSteps_;
 		// 当前仿真时间
 		double curTime_;
 		// 最长仿真时间
 		double simTime_;
-		// 仿真步数
-		int simSteps_;
 		// 自由仿真类型
 		bool simFree_;
 		// 回放仿真类型
 		bool simReplay_;
-		// 仿真步长
+		// 仿真步长,ms
 		unsigned stepTime_;
+		// 当前一步进行的时间，达到步长后推进下一步,ms
+		double curStepTime_;
+		// 仿真速率，实时为1
+		double simSpeed_;
 		// 记录名称
 		std::string recordName_;
 		// 定时器
 		Timer timer_;
+
+		// 回调函数
+		AdminCallback initCallback_, registerCallback_, advanceCallback_;
 	};
 }
 
