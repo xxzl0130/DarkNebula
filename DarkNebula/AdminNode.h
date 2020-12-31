@@ -3,7 +3,11 @@
 #include <string>
 #include <vector>
 #include <cstdint>
-#include <algorithm>
+
+namespace std
+{
+	class thread;
+}
 
 namespace dn
 {
@@ -17,12 +21,13 @@ namespace dn
 	{
 		// 名称
 		std::string name;
+		// IP
+		std::string ip;
 		// 仿真步数
 		uint32_t steps;
 		// 包含的数据块
 		std::vector<NodeChunks> chunks;
 	};
-	template class DN_EXPORT std::vector<NodeInfo>;
 
 	enum SimState
 	{
@@ -42,6 +47,7 @@ namespace dn
 		 * \param sendPort 发布指令的端口
 		 */
 		AdminNode(uint16_t receivePort = 6666, uint16_t sendPort = 8888);
+		~AdminNode();
 
 		void setReceivePort(uint16_t port);
 		uint16_t getReceivePort() const { return receivePort_; }
@@ -62,6 +68,19 @@ namespace dn
 		// 获取数据块信息
 		std::vector<ChunkInfo> getChunkList() const { return chunkList_; }
 
+		// 设置缓冲区大小，默认4MB
+		void setBufferSize(size_t bytes);
+		// 获取缓冲区大小
+		size_t getBufferSize() const { return bufferSize_; }
+
+	private:
+		// 开始监听
+		void startListen();
+		// 停止监听
+		void stopListen();
+		// 监听函数
+		void listen();
+		
 	private:
 		// 接收节点回报的端口
 		uint16_t receivePort_;
@@ -73,6 +92,20 @@ namespace dn
 		std::vector<NodeInfo> nodeList_;
 		// 数据块信息
 		std::vector<ChunkInfo> chunkList_;
+		// 发布指令的socket
+		void* pubSocket_;
+		// 接收回报的socket
+		void* subSocket_;
+		// socket环境
+		void* socketContext_;
+		// 监听线程
+		std::thread* listenThread_;
+		// 监听线程停止标志
+		bool listenStop_,listenStopped_;
+		// 缓冲区
+		char* buffer;
+		// 缓冲区大小
+		size_t bufferSize_;
 	};
 }
 
