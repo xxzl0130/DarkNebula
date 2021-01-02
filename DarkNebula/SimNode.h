@@ -50,6 +50,10 @@ namespace dn
 		// 管理节点发送指令的端口
 		void setAdminSendPort(uint16_t port);
 
+		// 设置缓冲区大小，默认1MB
+		void setBufferSize(size_t bytes);
+		size_t getBufferSize();
+
 		// 注册，之后无法修改参数
 		bool regIn();
 
@@ -73,6 +77,27 @@ namespace dn
 		double getSimTime() const;
 
 	private:
+		// 数据块定义
+		struct Chunk
+		{
+			// 名称
+			std::string name;
+			// 容量
+			size_t size = 0;
+			// 数据指针
+			void* pData = nullptr;
+			// 所有权限
+			bool own = false;
+			// 初始化
+			bool init = false;
+			// 端口
+			uint16_t port = 0;
+			// 编号
+			int id = 0;
+			// socket指针
+			void* socket = nullptr;
+		};
+		
 		// 运行线程
 		void working();
 		// 停止
@@ -81,21 +106,24 @@ namespace dn
 		bool sendReg();
 		// 初始化
 		void initSocket();
-
-		// 数据块定义
-		struct Chunk
-		{
-			// 名称
-			std::string name;
-			// 容量
-			size_t size = 0;
-			// 所有权限
-			bool own = false;
-			// 端口
-			uint16_t port = 0;
-			// socket指针
-			void* socket;
-		};
+		// 向管理节点发送指令
+		void send2Admin(int code, const char* data = nullptr, size_t size = 0);
+		// 获取指针
+		char* inBufferData() const;
+		// 获取接收字符串
+		std::string inString() const;
+		// 获取头
+		CommandHeader* inHeader() const;
+		// 获取头部后续的数据指针
+		char* inData() const;
+		// 从socket接收数据读到inBuffer
+		int recvMsg(void* socket);
+		// 处理管理节点指令
+		void processAdminCommand();
+		// 处理初始化信息
+		void init();
+		// 发送一个数据块
+		void sendChunk(Chunk& chunk);
 
 	private:
 		SimEventCallback initCallback_, startCallback_, pauseCallback_, stopCallback_;
@@ -123,12 +151,18 @@ namespace dn
 		bool slowNode_;
 		// 运行中
 		bool running_;
-		// 通信线程停止标志
-		bool comStop_;
+		// 线程停止标志
+		bool workStop_;
 		// 通信线程锁
 		std::mutex workMutex_;
 		// 通信线程
 		std::thread* workThread_;
+		// 输出缓冲区
+		char* outBuffer_;
+		// 输入缓冲区
+		zmq_msg_t* inBuffer_;
+		// 缓冲区大小
+		size_t bufferSize_;
 
 		// socket环境
 		void* socketContext_;
@@ -136,8 +170,14 @@ namespace dn
 		void* pubSocket_;
 		// 从管理节点接收指令的socket
 		void* subSocket_;
+		// 监听列表
+		zmq_pollitem_t* pollitems_;
+		// 监听数量
+		int pollCount_;
 		// 数据块列表
 		std::vector<Chunk> chunks_;
+		// 本节点id
+		int id_;
 	};
 }
 

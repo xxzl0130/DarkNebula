@@ -11,6 +11,9 @@
 #endif
 #include <cstdint>
 
+struct zmq_msg_t;
+struct zmq_pollitem_t;
+
 namespace dn
 {
 	// ЦёБо
@@ -42,7 +45,9 @@ namespace dn
 	constexpr auto ALL_NODE = -1;
 
 	constexpr auto COMMAND_TOPIC = "command";
+	constexpr auto COMMAND_TOPIC_LEN = 7;
 	constexpr auto REPLY_TOPIC = "reply";
+	constexpr auto REPLY_TOPIC_LEN = 5;
 	constexpr uint16_t ADMIN_RECEIVE_PORT = 6666;
 	constexpr uint16_t ADMIN_SEND_PORT = 8888;
 	constexpr uint16_t CHUNK_PORT = 10000;

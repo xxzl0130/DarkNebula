@@ -130,9 +130,10 @@ std::vector<dn::ChunkInfo> dn::AdminNode::getChunkList() const
 
 void dn::AdminNode::setBufferSize(size_t bytes)
 {
+	if (bytes <= 2 * sizeof CommandHeader)
+		bytes = 2 * sizeof CommandHeader;
 	if(bytes == bufferSize_)
 		return;
-	assert(bytes >= sizeof CommandHeader);
 	stopListen();
 	if(inBuffer_)
 	{
@@ -224,14 +225,14 @@ void dn::AdminNode::initSim()
 	simReplay_ = true;
 	// 把各种信息打到json里发布
 	json info;
-	auto nodes = json::array();
-	auto chunks = json::array();
+	json nodes;
+	json chunks;
 	for(auto i = 0ull;i < nodeList_.size();++i)
 	{
 		json obj;
 		obj["name"] = nodeList_[i].name;
 		obj["id"] = i;
-		nodes.push_back(obj);
+		nodes[nodeList_[i].name] = obj;
 		// 所有节点都是重放状态才是重放
 		simReplay_ = simReplay_ && nodeList_[i].replay;
 	}
@@ -241,7 +242,7 @@ void dn::AdminNode::initSim()
 		obj["name"] = chunkList_[i].first;
 		obj["path"] = chunkList_[i].second;
 		obj["id"] = i;
-		chunks.push_back(obj);
+		chunks[chunkList_[i].first] = obj;
 	}
 	info["nodes"] = nodes;
 	info["chunks"] = chunks;
@@ -387,7 +388,7 @@ void dn::AdminNode::listen()
 
 void dn::AdminNode::sendMsg(void* buffer, size_t len)
 {
-	zmq_send(pubSocket_, COMMAND_TOPIC, strlen(COMMAND_TOPIC), ZMQ_SNDMORE);
+	zmq_send(pubSocket_, COMMAND_TOPIC, COMMAND_TOPIC_LEN, ZMQ_SNDMORE);
 	zmq_send(pubSocket_, buffer, len, 0);
 }
 

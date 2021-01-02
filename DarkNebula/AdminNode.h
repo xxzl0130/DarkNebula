@@ -7,13 +7,9 @@
 #include <cstdint>
 #include <mutex>
 #include <functional>
+#include <thread>
 #include "Timer.h"
 
-struct zmq_msg_t;
-namespace std
-{
-	class thread;
-}
 
 namespace dn
 {
