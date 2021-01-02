@@ -64,6 +64,11 @@ void dn::AdminNode::setReceivePort(uint16_t port)
 	startListen();
 }
 
+uint16_t dn::AdminNode::getReceivePort() const
+{
+	return receivePort_;
+}
+
 void dn::AdminNode::setSendPort(uint16_t port)
 {
 	if (simState_ != SimNop && (port == receivePort_ || simState_ == SimRun || simState_ == SimPause))
@@ -81,6 +86,46 @@ void dn::AdminNode::setSendPort(uint16_t port)
 	startListen();
 }
 
+uint16_t dn::AdminNode::getSendPort() const
+{
+	return sendPort_;
+}
+
+dn::SimState dn::AdminNode::getSimState() const
+{
+	return simState_;
+}
+
+bool dn::AdminNode::isFreeSim() const
+{
+	return simFree_;
+}
+
+bool dn::AdminNode::isReplaySim() const
+{
+	return simReplay_;
+}
+
+size_t dn::AdminNode::getNodeCount() const
+{
+	return nodeList_.size();
+}
+
+std::vector<dn::NodeInfo> dn::AdminNode::getNodeList() const
+{
+	return nodeList_;
+}
+
+size_t dn::AdminNode::getChunkCount() const
+{
+	return chunkList_.size();
+}
+
+std::vector<dn::ChunkInfo> dn::AdminNode::getChunkList() const
+{
+	return chunkList_;
+}
+
 void dn::AdminNode::setBufferSize(size_t bytes)
 {
 	if(bytes == bufferSize_)
@@ -95,6 +140,21 @@ void dn::AdminNode::setBufferSize(size_t bytes)
 	memset(outBuffer, 0, bytes);
 	bufferSize_ = bytes;
 	startListen();
+}
+
+size_t dn::AdminNode::getBufferSize() const
+{
+	return bufferSize_;
+}
+
+double dn::AdminNode::getCurTime() const
+{
+	return curTime_;
+}
+
+unsigned dn::AdminNode::getCurSteps() const
+{
+	return simSteps_;
 }
 
 void dn::AdminNode::clear()
@@ -241,6 +301,21 @@ void dn::AdminNode::stepBackward()
 	simState_ = SimStep;
 }
 
+void dn::AdminNode::onInitOver(AdminCallback callback)
+{
+	initCallback_ = std::move(callback);
+}
+
+void dn::AdminNode::onRegister(AdminCallback callback)
+{
+	registerCallback_ = std::move(callback);
+}
+
+void dn::AdminNode::onAdvance(AdminCallback callback)
+{
+	advanceCallback_ = std::move(callback);
+}
+
 void dn::AdminNode::startListen()
 {
 	if(listenThread_ != nullptr)
@@ -344,7 +419,7 @@ bool dn::AdminNode::checkInit()
 bool dn::AdminNode::checkStep()
 {
 	for (const auto& it : nodeList_)
-		if (it.steps != simSteps_)
+		if (it.steps != simSteps_ && !it.slow)
 			return false;
 	return true;
 }
@@ -368,6 +443,7 @@ void dn::AdminNode::nodeReg(char* buffer, int len)
 	}
 	auto chunks = obj["chunks"];
 	nodeList_[id].ip = obj["ip"].get<std::string>();
+	nodeList_[id].slow = obj["slow"].get<bool>();
 	nodeList_[id].chunks.clear();
 	if(chunks.is_array())
 	{

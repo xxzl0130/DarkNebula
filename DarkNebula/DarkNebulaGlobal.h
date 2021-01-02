@@ -43,4 +43,7 @@ namespace dn
 
 	constexpr auto COMMAND_TOPIC = "command";
 	constexpr auto REPLY_TOPIC = "reply";
+	constexpr uint16_t ADMIN_RECEIVE_PORT = 6666;
+	constexpr uint16_t ADMIN_SEND_PORT = 8888;
+	constexpr uint16_t CHUNK_PORT = 10000;
 }

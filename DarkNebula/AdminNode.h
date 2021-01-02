@@ -37,6 +37,8 @@ namespace dn
 		bool replay = false;
 		// 初始化
 		bool init = false;
+		// 慢速节点，即不保证跟随每一步仿真
+		bool slow = false;
 		// 包含的数据块
 		std::vector<NodeChunks> chunks;
 	};
@@ -59,43 +61,43 @@ namespace dn
 		 * \param receivePort 接收节点回报的端口
 		 * \param sendPort 发布指令的端口
 		 */
-		AdminNode(uint16_t receivePort = 6666, uint16_t sendPort = 8888);
+		AdminNode(uint16_t receivePort = ADMIN_RECEIVE_PORT, uint16_t sendPort = ADMIN_SEND_PORT);
 		~AdminNode();
 
 		/// 环境设置
 
 		// 设置接收端口
 		void setReceivePort(uint16_t port);
-		uint16_t getReceivePort() const { return receivePort_; }
+		uint16_t getReceivePort() const;
 
 		// 设置发送端口
 		void setSendPort(uint16_t port);
-		uint16_t getSendPort() const { return sendPort_; }
+		uint16_t getSendPort() const;
 
 		// 获取仿真状态
-		SimState getSimState() const { return simState_; }
-		bool isFreeSim() const { return simFree_; }
-		bool isReplaySim() const { return simReplay_; }
+		SimState getSimState() const;
+		bool isFreeSim() const;
+		bool isReplaySim() const;
 
 		// 获取节点数目
-		size_t getNodeCount() const { return nodeList_.size(); }
+		size_t getNodeCount() const;
 		// 获取节点信息
-		std::vector<NodeInfo> getNodeList() const { return nodeList_; }
+		std::vector<NodeInfo> getNodeList() const;
 
 		// 获取数据块数目
-		size_t getChunkCount() const { return chunkList_.size(); }
+		size_t getChunkCount() const;
 		// 获取数据块信息
-		std::vector<ChunkInfo> getChunkList() const { return chunkList_; }
+		std::vector<ChunkInfo> getChunkList() const;
 
 		// 设置缓冲区大小，默认1MB
 		void setBufferSize(size_t bytes);
 		// 获取缓冲区大小
-		size_t getBufferSize() const { return bufferSize_; }
+		size_t getBufferSize() const;
 
 		// 获取当前仿真时间
-		double getCurTime() const { return curTime_; }
+		double getCurTime() const;
 		// 获取当前仿真步数
-		unsigned getCurSteps() const { return simSteps_; }
+		unsigned getCurSteps() const;
 		// 清除所有已经注册的节点信息
 		void clear();
 
@@ -135,11 +137,11 @@ namespace dn
 
 		/// 回调函数
 		// 初始化完成
-		void onInitOver(AdminCallback callback) { initCallback_ = std::move(callback); }
+		void onInitOver(AdminCallback callback);
 		// 注册
-		void onRegister(AdminCallback callback) { registerCallback_ = std::move(callback); }
+		void onRegister(AdminCallback callback);
 		// 推进
-		void onAdvance(AdminCallback callback) { advanceCallback_ = std::move(callback); }
+		void onAdvance(AdminCallback callback);
 
 	private:
 		// 开始监听
@@ -201,7 +203,7 @@ namespace dn
 
 		/// 步数和时间会合并发送，在这里的结构不能改
 		// 仿真步数
-		unsigned simSteps_;
+		uint32_t simSteps_;
 		// 当前仿真时间
 		double curTime_;
 		// 最长仿真时间
@@ -211,7 +213,7 @@ namespace dn
 		// 回放仿真类型
 		bool simReplay_;
 		// 仿真步长,ms
-		unsigned stepTime_;
+		uint32_t stepTime_;
 		// 当前一步进行的时间，达到步长后推进下一步,ms
 		double curStepTime_;
 		// 仿真速率，实时为1
