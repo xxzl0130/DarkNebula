@@ -13,15 +13,6 @@ dn::AdminNode::AdminNode(uint16_t receivePort, uint16_t sendPort):
 	receivePort_(receivePort),
 	sendPort_(sendPort),
 	simState_(SimNop),
-	pubSocket_(nullptr),
-	subSocket_(nullptr),
-	socketContext_(zmq_ctx_new()),
-	listenThread_(nullptr),
-	listenStop_(false),
-	inBuffer_(nullptr),
-	outBuffer_(nullptr),
-	simSteps_(0),
-	curTime_(0),
 	simTime_(10),
 	simFree_(false),
 	simReplay_(false),
@@ -38,7 +29,7 @@ dn::AdminNode::AdminNode(uint16_t receivePort, uint16_t sendPort):
 
 dn::AdminNode::~AdminNode()
 {
-	stopListen();
+	stopWorking();
 	zmq_close(pubSocket_);
 	zmq_close(subSocket_);
 	zmq_ctx_destroy(socketContext_);
@@ -52,7 +43,7 @@ void dn::AdminNode::setReceivePort(uint16_t port)
 {
 	if (simState_ != SimNop && (port == receivePort_ || simState_ == SimRun || simState_ == SimPause))
 		return;
-	stopListen();
+	stopWorking();
 	receivePort_ = port;
 	if(subSocket_)
 	{
@@ -63,7 +54,7 @@ void dn::AdminNode::setReceivePort(uint16_t port)
 	ss << "tcp://*:" << receivePort_;
 	assert(zmq_bind(subSocket_, ss.str().c_str()) == 0);
 	zmq_setsockopt(subSocket_, ZMQ_SUBSCRIBE, REPLY_TOPIC, strlen(REPLY_TOPIC));
-	startListen();
+	startWorking();
 }
 
 uint16_t dn::AdminNode::getReceivePort() const
@@ -75,7 +66,7 @@ void dn::AdminNode::setSendPort(uint16_t port)
 {
 	if (simState_ != SimNop && (port == receivePort_ || simState_ == SimRun || simState_ == SimPause))
 		return;
-	stopListen();
+	stopWorking();
 	sendPort_ = port;
 	if(pubSocket_)
 	{
@@ -85,7 +76,7 @@ void dn::AdminNode::setSendPort(uint16_t port)
 	std::stringstream ss;
 	ss << "tcp://*:" << sendPort_;
 	assert(zmq_bind(pubSocket_, ss.str().c_str()) == 0);
-	startListen();
+	startWorking();
 }
 
 uint16_t dn::AdminNode::getSendPort() const
@@ -130,28 +121,9 @@ std::vector<dn::ChunkInfo> dn::AdminNode::getChunkList() const
 
 void dn::AdminNode::setBufferSize(size_t bytes)
 {
-	if (bytes <= 2 * sizeof CommandHeader)
-		bytes = 2 * sizeof CommandHeader;
-	if(bytes == bufferSize_)
-		return;
-	stopListen();
-	if(inBuffer_)
-	{
-		zmq_msg_close(inBuffer_);
-		delete inBuffer_;
-	}
-	inBuffer_ = new zmq_msg_t;
-	zmq_msg_init_size(inBuffer_, bytes);
-	delete[] outBuffer_;
-	outBuffer_ = new char[bytes];
-	memset(outBuffer_, 0, bytes);
-	bufferSize_ = bytes;
-	startListen();
-}
-
-size_t dn::AdminNode::getBufferSize() const
-{
-	return bufferSize_;
+	stopWorking();
+	Node::setBufferSize(bytes);
+	startWorking();
 }
 
 double dn::AdminNode::getCurTime() const
@@ -323,34 +295,15 @@ void dn::AdminNode::onAdvance(AdminCallback callback)
 	advanceCallback_ = std::move(callback);
 }
 
-void dn::AdminNode::startListen()
+void dn::AdminNode::working()
 {
-	if(listenThread_ != nullptr)
-	{
-		stopListen();
-	}
-	listenThread_ = new std::thread([this] { listen(); });
-	listenThread_->detach();
-}
-
-void dn::AdminNode::stopListen()
-{
-	listenStop_ = true;
-	std::unique_lock<std::mutex> lock(listenMutex_);
-	delete listenThread_;
-	listenThread_ = nullptr;
-	listenStop_ = false;
-}
-
-void dn::AdminNode::listen()
-{
-	std::unique_lock<std::mutex> lock(listenMutex_);
+	std::unique_lock<std::mutex> lock(workMutex_);
 	if (!subSocket_)
 	{
 		return;
 	}
 	zmq_pollitem_t pollitem{ subSocket_,0,ZMQ_POLLIN };
-	while(!listenStop_)
+	while(!workStop_)
 	{
 		auto item = zmq_poll(&pollitem, 1, 1);
 		if(item > 0)
@@ -536,18 +489,4 @@ void dn::AdminNode::timerEvent()
 		curStepTime_ = 0.0;
 		stepAdvance();
 	}
-}
-
-char* dn::AdminNode::inBufferData() const
-{
-	if (!inBuffer_)
-		return nullptr;
-	return static_cast<char*>(zmq_msg_data(inBuffer_));
-}
-
-std::string dn::AdminNode::inString() const
-{
-	if (!inBuffer_)
-		return "";
-	return std::string(inBufferData(), zmq_msg_size(inBuffer_));
 }

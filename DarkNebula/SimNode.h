@@ -1,14 +1,7 @@
 #pragma once
-#include <functional>
-#include <thread>
-#include <string>
-#include <cstdint>
-#include <mutex>
-#include <vector>
-
-
-
 #include "DarkNebulaGlobal.h"
+
+#include "Node.h"
 
 namespace dn
 {
@@ -17,7 +10,7 @@ namespace dn
 	// 仿真推进回调函数
 	typedef std::function<void(uint32_t,double)> SimStepCallback;
 	
-	class DN_EXPORT SimNode
+	class DN_EXPORT SimNode : public Node
 	{
 	public:
 		/**
@@ -32,7 +25,7 @@ namespace dn
 		 */
 		SimNode(const std::string& nodeName, const std::string& nodeIP = "127.0.0.1", uint16_t chunkPort = 10000, bool slowNode = false,
 			const std::string& adminIP = "127.0.0.1", uint16_t adminRecvPort = ADMIN_RECEIVE_PORT, uint16_t adminSendPort = ADMIN_SEND_PORT);
-		~SimNode();
+		virtual ~SimNode();
 		
 		/// 节点参数设置，需要在注册以前设置
 		// 节点名称
@@ -50,10 +43,6 @@ namespace dn
 		// 管理节点发送指令的端口
 		void setAdminSendPort(uint16_t port);
 
-		// 设置缓冲区大小，默认1MB
-		void setBufferSize(size_t bytes);
-		size_t getBufferSize();
-
 		// 注册，之后无法修改参数
 		bool regIn();
 
@@ -70,11 +59,6 @@ namespace dn
 		void setSimStepCallback(SimStepCallback callback);
 		// 回放推进函数，不设置时遇到回放将调用普通仿真函数
 		void setReplayStepCallback(SimStepCallback callback);
-
-		// 获取当前仿真步数
-		uint32_t getSimStep() const;
-		// 获取当前仿真时间
-		double getSimTime() const;
 
 	private:
 		// 数据块定义
@@ -99,25 +83,13 @@ namespace dn
 		};
 		
 		// 运行线程
-		void working();
-		// 停止
-		void stop();
+		void working() override;
 		// 发送注册消息
 		bool sendReg();
 		// 初始化
 		void initSocket();
 		// 向管理节点发送指令
 		void send2Admin(int code, const char* data = nullptr, size_t size = 0);
-		// 获取指针
-		char* inBufferData() const;
-		// 获取接收字符串
-		std::string inString() const;
-		// 获取头
-		CommandHeader* inHeader() const;
-		// 获取头部后续的数据指针
-		char* inData() const;
-		// 从socket接收数据读到inBuffer
-		int recvMsg(void* socket);
 		// 处理管理节点指令
 		void processAdminCommand();
 		// 处理初始化信息
@@ -128,12 +100,6 @@ namespace dn
 	private:
 		SimEventCallback initCallback_, startCallback_, pauseCallback_, stopCallback_;
 		SimStepCallback simStepCallback_, replayStepCallback_;
-
-		/// 步数和时间会合并发送，在这里的结构不能改
-		// 仿真步数
-		uint32_t simSteps_;
-		// 当前仿真时间
-		double simTime_;
 
 		// 节点名称
 		std::string nodeName_;
@@ -151,25 +117,7 @@ namespace dn
 		bool slowNode_;
 		// 运行中
 		bool running_;
-		// 线程停止标志
-		bool workStop_;
-		// 通信线程锁
-		std::mutex workMutex_;
-		// 通信线程
-		std::thread* workThread_;
-		// 输出缓冲区
-		char* outBuffer_;
-		// 输入缓冲区
-		zmq_msg_t* inBuffer_;
-		// 缓冲区大小
-		size_t bufferSize_;
-
-		// socket环境
-		void* socketContext_;
-		// 向管理节点发布指令的socket
-		void* pubSocket_;
-		// 从管理节点接收指令的socket
-		void* subSocket_;
+		
 		// 监听列表
 		zmq_pollitem_t* pollitems_;
 		// 监听数量

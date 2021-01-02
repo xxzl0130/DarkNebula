@@ -7,17 +7,8 @@ using nlohmann::json;
 
 dn::SimNode::SimNode(const std::string& nodeName, const std::string& nodeIP, uint16_t chunkPort, bool slowNode,
 	const std::string& adminIP, uint16_t adminRecvPort, uint16_t adminSendPort):
-	simSteps_(0),
-	simTime_(0),
 	slowNode_(false),
 	running_(false),
-	workStop_(false),
-	workThread_(nullptr),
-	outBuffer_(nullptr),
-	inBuffer_(nullptr),
-	socketContext_(zmq_ctx_new()),
-	pubSocket_(nullptr),
-	subSocket_(nullptr),
 	pollitems_(nullptr),
 	pollCount_(0),
 	id_(-1)
@@ -28,15 +19,10 @@ dn::SimNode::SimNode(const std::string& nodeName, const std::string& nodeIP, uin
 	setAdminIP(adminIP);
 	setAdminRecvPort(adminRecvPort);
 	setAdminSendPort(adminSendPort);
-	setBufferSize(1 * 1024 * 1024);
 }
 
 dn::SimNode::~SimNode()
 {
-	stop();
-	zmq_close(pubSocket_);
-	zmq_close(subSocket_);
-	zmq_ctx_destroy(socketContext_);
 }
 
 void dn::SimNode::setNodeName(const std::string& name)
@@ -88,29 +74,6 @@ void dn::SimNode::setAdminSendPort(uint16_t port)
 	adminSendPort_ = port;
 }
 
-void dn::SimNode::setBufferSize(size_t bytes)
-{
-	if (bytes <= 2 * sizeof CommandHeader)
-		bytes = 2 * sizeof CommandHeader;
-	if (bytes == bufferSize_)
-		return;
-	bufferSize_ = bytes;
-	if (inBuffer_)
-	{
-		zmq_msg_close(inBuffer_);
-		delete inBuffer_;
-	}
-	inBuffer_ = new struct zmq_msg_t;
-	zmq_msg_init_size(inBuffer_, bytes);
-	delete[] outBuffer_;
-	outBuffer_ = new char[bytes];
-}
-
-size_t dn::SimNode::getBufferSize()
-{
-	return bufferSize_;
-}
-
 bool dn::SimNode::regIn()
 {
 	if(running_)
@@ -118,14 +81,7 @@ bool dn::SimNode::regIn()
 	initSocket();
 	if (!sendReg())
 		return false;
-	if(workThread_)
-	{
-		stop();
-		delete workThread_;
-	}
-	running_ = true;
-	workThread_ = new std::thread([this]() {working(); });
-	workThread_->detach();
+	startWorking();
 	return true;
 }
 
@@ -159,16 +115,6 @@ void dn::SimNode::setReplayStepCallback(SimStepCallback callback)
 	replayStepCallback_ = std::move(callback);
 }
 
-uint32_t dn::SimNode::getSimStep() const
-{
-	return simSteps_;
-}
-
-double dn::SimNode::getSimTime() const
-{
-	return simTime_;
-}
-
 void dn::SimNode::working()
 {
 	std::unique_lock<std::mutex> lock(workMutex_);
@@ -197,16 +143,6 @@ void dn::SimNode::working()
 
 	delete[] pollitems_;
 	pollitems_ = nullptr;
-}
-
-void dn::SimNode::stop()
-{
-	workStop_ = true;
-	// ¼ÓËøµÈ´ý
-	std::unique_lock<std::mutex> lock(workMutex_);
-	delete workThread_;
-	workThread_ = nullptr;
-	workStop_ = false;
 }
 
 bool dn::SimNode::sendReg()
@@ -297,33 +233,6 @@ void dn::SimNode::send2Admin(int code, const char* data, size_t size)
 	zmq_send(pubSocket_, outBuffer_, size + sizeof CommandHeader, 0);
 }
 
-char* dn::SimNode::inBufferData() const
-{
-	assert(inBuffer_ != nullptr);
-	return static_cast<char*>(zmq_msg_data(inBuffer_));
-}
-
-std::string dn::SimNode::inString() const
-{
-	assert(inBuffer_ != nullptr);
-	return std::string(inBufferData(), zmq_msg_size(inBuffer_));
-}
-
-dn::CommandHeader* dn::SimNode::inHeader() const
-{
-	assert(inBuffer_ != nullptr);
-	return static_cast<CommandHeader*>(zmq_msg_data(inBuffer_));
-}
-
-char* dn::SimNode::inData() const
-{
-	return inBufferData() + sizeof CommandHeader;
-}
-
-int dn::SimNode::recvMsg(void* socket)
-{
-	return zmq_msg_recv(inBuffer_, socket, ZMQ_DONTWAIT);
-}
 
 void dn::SimNode::processAdminCommand()
 {

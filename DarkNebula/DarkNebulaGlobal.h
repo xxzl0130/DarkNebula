@@ -9,7 +9,20 @@
 #else
 #define DN_EXPORT
 #endif
+
+#pragma warning(disable:4267)
+#pragma warning(disable:4251)
+
 #include <cstdint>
+#include <functional>
+#include <thread>
+#include <string>
+#include <cstdint>
+#include <mutex>
+#include <vector>
+#include <map>
+#include <algorithm>
+
 
 struct zmq_msg_t;
 struct zmq_pollitem_t;

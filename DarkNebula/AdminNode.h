@@ -1,15 +1,8 @@
 #pragma once
 #include "DarkNebulaGlobal.h"
-#include <string>
-#include <vector>
-#include <map>
-#include <atomic>
-#include <cstdint>
-#include <mutex>
-#include <functional>
-#include <thread>
-#include "Timer.h"
 
+#include "Node.h"
+#include "Timer.h"
 
 namespace dn
 {
@@ -50,7 +43,7 @@ namespace dn
 		SimStep,		// 单步模式
 	};
 	
-	class DN_EXPORT AdminNode
+	class DN_EXPORT AdminNode : public Node
 	{
 	public:
 		/**
@@ -59,7 +52,7 @@ namespace dn
 		 * \param sendPort 发布指令的端口
 		 */
 		AdminNode(uint16_t receivePort = ADMIN_RECEIVE_PORT, uint16_t sendPort = ADMIN_SEND_PORT);
-		~AdminNode();
+		virtual ~AdminNode();
 
 		/// 环境设置
 
@@ -76,6 +69,9 @@ namespace dn
 		bool isFreeSim() const;
 		bool isReplaySim() const;
 
+		// 设置缓冲区大小
+		virtual void setBufferSize(size_t bytes) override;
+		
 		// 获取节点数目
 		size_t getNodeCount() const;
 		// 获取节点信息
@@ -85,11 +81,6 @@ namespace dn
 		size_t getChunkCount() const;
 		// 获取数据块信息
 		std::vector<ChunkInfo> getChunkList() const;
-
-		// 设置缓冲区大小，默认1MB
-		void setBufferSize(size_t bytes);
-		// 获取缓冲区大小
-		size_t getBufferSize() const;
 
 		// 获取当前仿真时间
 		double getCurTime() const;
@@ -141,12 +132,8 @@ namespace dn
 		void onAdvance(AdminCallback callback);
 
 	private:
-		// 开始监听
-		void startListen();
-		// 停止监听
-		void stopListen();
 		// 监听函数
-		void listen();
+		void working() override;
 		// 发送消息
 		void sendMsg(void* buffer, size_t len);
 		// 发送命令，在outBuffer的0处制作
@@ -167,10 +154,6 @@ namespace dn
 		void nodeStep(char* buffer, int len);
 		// 定时事件
 		void timerEvent();
-		// 获取指针
-		char* inBufferData() const;
-		// 获取接收字符串
-		std::string inString() const;
 		
 	private:
 		// 接收节点回报的端口
@@ -185,30 +168,7 @@ namespace dn
 		// 数据块信息
 		std::vector<ChunkInfo> chunkList_;
 		std::map<std::string, int> chunkMap_;
-		// 发布指令的socket
-		void* pubSocket_;
-		// 接收回报的socket
-		void* subSocket_;
-		// socket环境
-		void* socketContext_;
-		// 监听线程
-		std::thread* listenThread_;
-		// 监听线程停止标志
-		bool listenStop_;
-		// 输出缓冲区
-		char* outBuffer_;
-		// 输入缓冲区
-		zmq_msg_t *inBuffer_;
-		// 缓冲区大小
-		size_t bufferSize_;
-		// 监听锁
-		std::mutex listenMutex_;
 
-		/// 步数和时间会合并发送，在这里的结构不能改
-		// 仿真步数
-		uint32_t simSteps_;
-		// 当前仿真时间
-		double curTime_;
 		// 最长仿真时间
 		double simTime_;
 		// 自由仿真类型

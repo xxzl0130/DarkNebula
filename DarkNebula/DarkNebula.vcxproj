@@ -21,11 +21,13 @@
   <ItemGroup>
     <ClInclude Include="AdminNode.h" />
     <ClInclude Include="DarkNebulaGlobal.h" />
+    <ClInclude Include="Node.h" />
     <ClInclude Include="SimNode.h" />
     <ClInclude Include="Timer.h" />
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="AdminNode.cpp" />
+    <ClCompile Include="Node.cpp" />
     <ClCompile Include="SimNode.cpp" />
     <ClCompile Include="Timer.cpp" />
   </ItemGroup>
