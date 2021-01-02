@@ -95,7 +95,7 @@ bool dn::SimNode::regIn()
 		delete workThread_;
 	}
 	running_ = true;
-	workThread_ = new std::thread([this]() {communicate(); });
+	workThread_ = new std::thread([this]() {working(); });
 	workThread_->detach();
 	return true;
 }

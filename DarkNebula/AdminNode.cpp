@@ -18,8 +18,8 @@ dn::AdminNode::AdminNode(uint16_t receivePort, uint16_t sendPort):
 	socketContext_(zmq_ctx_new()),
 	listenThread_(nullptr),
 	listenStop_(false),
-	inBuffer(nullptr),
-	outBuffer(nullptr),
+	inBuffer_(nullptr),
+	outBuffer_(nullptr),
 	simSteps_(0),
 	curTime_(0),
 	simTime_(10),
@@ -42,8 +42,8 @@ dn::AdminNode::~AdminNode()
 	zmq_close(pubSocket_);
 	zmq_close(subSocket_);
 	zmq_ctx_destroy(socketContext_);
-	delete[] inBuffer;
-	delete[] outBuffer;
+	delete[] inBuffer_;
+	delete[] outBuffer_;
 }
 
 void dn::AdminNode::setReceivePort(uint16_t port)
@@ -132,12 +132,16 @@ void dn::AdminNode::setBufferSize(size_t bytes)
 		return;
 	assert(bytes >= sizeof CommandHeader);
 	stopListen();
-	delete[] inBuffer;
-	inBuffer = new char[bytes];
-	memset(inBuffer, 0, bytes);
-	delete[] outBuffer;
-	outBuffer = new char[bytes];
-	memset(outBuffer, 0, bytes);
+	if(inBuffer_)
+	{
+		zmq_msg_close(inBuffer_);
+		delete inBuffer_;
+	}
+	inBuffer_ = new zmq_msg_t;
+	zmq_msg_init_size(inBuffer_, bytes);
+	delete[] outBuffer_;
+	outBuffer_ = new char[bytes];
+	memset(outBuffer_, 0, bytes);
 	bufferSize_ = bytes;
 	startListen();
 }
@@ -348,28 +352,28 @@ void dn::AdminNode::listen()
 		auto item = zmq_poll(&pollitem, 1, 1);
 		if(item > 0)
 		{
-			auto len = zmq_recv(subSocket_, inBuffer, bufferSize_, ZMQ_DONTWAIT);
+			auto len = zmq_msg_recv(inBuffer_, subSocket_, ZMQ_DONTWAIT);
 			if(len <= 0)
 				continue;
 			// 第一条应该是topic
-			if(strcmp(inBuffer,REPLY_TOPIC) != 0)
+			if(inString() != REPLY_TOPIC)
 				continue;
 			// 再接一次是数据
-			len = zmq_recv(subSocket_, inBuffer, bufferSize_, ZMQ_DONTWAIT);
+			len = zmq_msg_recv(inBuffer_, subSocket_, ZMQ_DONTWAIT);
 			if(len < sizeof CommandHeader)
 				continue;
-			auto* header = reinterpret_cast<CommandHeader*>(inBuffer);
+			auto* header = reinterpret_cast<CommandHeader*>(inBufferData());
 			switch (header->code)
 			{
 			case COMMAND_REG:
-				nodeReg(inBuffer, len);
+				nodeReg(inBufferData(), len);
 				break;
 			case COMMAND_INIT:
-				nodeInit(inBuffer, len);
+				nodeInit(inBufferData(), len);
 				break;
 			case COMMAND_STEP_FORWARD:
 			case COMMAND_STEP_BACKWARD:
-				nodeStep(inBuffer, len);
+				nodeStep(inBufferData(), len);
 				break;
 			// TODO
 			default:
@@ -387,8 +391,8 @@ void dn::AdminNode::sendMsg(void* buffer, size_t len)
 
 void dn::AdminNode::sendCommand(int id, int code, size_t size, void const* data)
 {
-	memset(outBuffer, 0, bufferSize_);
-	auto* header = reinterpret_cast<CommandHeader*>(outBuffer);
+	memset(outBuffer_, 0, bufferSize_);
+	auto* header = reinterpret_cast<CommandHeader*>(outBuffer_);
 	header->ID = id;
 	header->code = code;
 	header->size = size;
@@ -396,9 +400,9 @@ void dn::AdminNode::sendCommand(int id, int code, size_t size, void const* data)
 	{
 		if (size > bufferSize_ - sizeof CommandHeader)
 			setBufferSize(size * 2);
-		memcpy_s(outBuffer + sizeof CommandHeader, size, data, size);
+		memcpy_s(outBuffer_ + sizeof CommandHeader, size, data, size);
 	}
-	sendMsg(outBuffer, size + sizeof CommandHeader);
+	sendMsg(outBuffer_, size + sizeof CommandHeader);
 }
 
 void dn::AdminNode::stepAdvance()
@@ -529,4 +533,18 @@ void dn::AdminNode::timerEvent()
 		curStepTime_ = 0.0;
 		stepAdvance();
 	}
+}
+
+char* dn::AdminNode::inBufferData() const
+{
+	if (!inBuffer_)
+		return nullptr;
+	return static_cast<char*>(zmq_msg_data(inBuffer_));
+}
+
+std::string dn::AdminNode::inString() const
+{
+	if (!inBuffer_)
+		return "";
+	return std::string(inBufferData(), zmq_msg_size(inBuffer_));
 }

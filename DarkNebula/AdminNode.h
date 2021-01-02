@@ -9,6 +9,7 @@
 #include <functional>
 #include "Timer.h"
 
+struct zmq_msg_t;
 namespace std
 {
 	class thread;
@@ -170,6 +171,10 @@ namespace dn
 		void nodeStep(char* buffer, int len);
 		// 定时事件
 		void timerEvent();
+		// 获取指针
+		char* inBufferData() const;
+		// 获取接收字符串
+		std::string inString() const;
 		
 	private:
 		// 接收节点回报的端口
@@ -194,8 +199,10 @@ namespace dn
 		std::thread* listenThread_;
 		// 监听线程停止标志
 		bool listenStop_;
-		// 缓冲区
-		char* inBuffer, *outBuffer;
+		// 输出缓冲区
+		char* outBuffer_;
+		// 输入缓冲区
+		zmq_msg_t *inBuffer_;
 		// 缓冲区大小
 		size_t bufferSize_;
 		// 监听锁

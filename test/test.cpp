@@ -29,6 +29,7 @@ int main()
 						cout << "receive: id=" << header->ID << " code=" << header->code << " size=" << header->size << endl;
 					}
 				}
+				std::this_thread::sleep_for(chrono::seconds(10));
 		});
 	th.detach();
 	this_thread::sleep_for(chrono::milliseconds(100));
@@ -37,6 +38,7 @@ int main()
 	const auto* str = R"({
 		"name":"test",
 		"ip":"127.0.0.1",
+		"slow":false,
 		"chunks":[
 		{
 			"name":"AA",
