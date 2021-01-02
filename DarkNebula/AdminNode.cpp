@@ -12,11 +12,6 @@ using nlohmann::json;
 dn::AdminNode::AdminNode(uint16_t receivePort, uint16_t sendPort):
 	receivePort_(receivePort),
 	sendPort_(sendPort),
-	simState_(SimNop),
-	simTime_(10),
-	simFree_(false),
-	simReplay_(false),
-	stepTime_(10),
 	curStepTime_(0.0),
 	simSpeed_(1.0)
 {
@@ -84,21 +79,6 @@ uint16_t dn::AdminNode::getSendPort() const
 	return sendPort_;
 }
 
-dn::SimState dn::AdminNode::getSimState() const
-{
-	return simState_;
-}
-
-bool dn::AdminNode::isFreeSim() const
-{
-	return simFree_;
-}
-
-bool dn::AdminNode::isReplaySim() const
-{
-	return simReplay_;
-}
-
 size_t dn::AdminNode::getNodeCount() const
 {
 	return nodeList_.size();
@@ -124,16 +104,6 @@ void dn::AdminNode::setBufferSize(size_t bytes)
 	stopWorking();
 	Node::setBufferSize(bytes);
 	startWorking();
-}
-
-double dn::AdminNode::getCurTime() const
-{
-	return curTime_;
-}
-
-unsigned dn::AdminNode::getCurSteps() const
-{
-	return simSteps_;
 }
 
 void dn::AdminNode::clear()
@@ -218,6 +188,11 @@ void dn::AdminNode::initSim()
 	}
 	info["nodes"] = nodes;
 	info["chunks"] = chunks;
+	info["simTime"] = simTime_;
+	info["free"] = simFree_;
+	info["replay"] = simReplay_;
+	info["step"] = stepTime_;
+	info["record"] = recordName_;
 	auto jsonStr = info.dump();
 	sendCommand(ALL_NODE, COMMAND_INIT,jsonStr.size(),jsonStr.c_str());
 	curTime_ = 0.0;
@@ -365,7 +340,7 @@ void dn::AdminNode::stepAdvance()
 {
 	++simSteps_;
 	curTime_ = static_cast<double>(simSteps_) * stepTime_ / 1000.0;
-	sendCommand(ALL_NODE, COMMAND_STEP_FORWARD, sizeof curTime_ + sizeof simSteps_, &simSteps_);
+	sendCommand(ALL_NODE, COMMAND_STEP_FORWARD, sizeof curTime_, &curTime_);
 }
 
 bool dn::AdminNode::checkInit()

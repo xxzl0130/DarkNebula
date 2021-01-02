@@ -32,16 +32,6 @@ namespace dn
 		// 包含的数据块
 		std::vector<NodeChunks> chunks;
 	};
-
-	enum SimState
-	{
-		SimNop = 0,
-		SimInit,		// 初始化
-		SimStop,		// 停止中
-		SimRun = 0x10,	// 运行中
-		SimPause,		// 暂停中
-		SimStep,		// 单步模式
-	};
 	
 	class DN_EXPORT AdminNode : public Node
 	{
@@ -64,11 +54,6 @@ namespace dn
 		void setSendPort(uint16_t port);
 		uint16_t getSendPort() const;
 
-		// 获取仿真状态
-		SimState getSimState() const;
-		bool isFreeSim() const;
-		bool isReplaySim() const;
-
 		// 设置缓冲区大小
 		virtual void setBufferSize(size_t bytes) override;
 		
@@ -82,10 +67,6 @@ namespace dn
 		// 获取数据块信息
 		std::vector<ChunkInfo> getChunkList() const;
 
-		// 获取当前仿真时间
-		double getCurTime() const;
-		// 获取当前仿真步数
-		unsigned getCurSteps() const;
 		// 清除所有已经注册的节点信息
 		void clear();
 
@@ -160,29 +141,17 @@ namespace dn
 		uint16_t receivePort_;
 		// 发布指令的端口
 		uint16_t sendPort_;
-		// 仿真状态
-		SimState simState_;
 		// 节点信息
 		std::vector<NodeInfo> nodeList_;
 		std::map<std::string, int> nodeMap_;
 		// 数据块信息
 		std::vector<ChunkInfo> chunkList_;
 		std::map<std::string, int> chunkMap_;
-
-		// 最长仿真时间
-		double simTime_;
-		// 自由仿真类型
-		bool simFree_;
-		// 回放仿真类型
-		bool simReplay_;
-		// 仿真步长,ms
-		uint32_t stepTime_;
+	
 		// 当前一步进行的时间，达到步长后推进下一步,ms
 		double curStepTime_;
 		// 仿真速率，实时为1
 		double simSpeed_;
-		// 记录名称
-		std::string recordName_;
 		// 定时器
 		Timer timer_;
 

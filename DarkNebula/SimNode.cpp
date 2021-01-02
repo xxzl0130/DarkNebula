@@ -9,9 +9,9 @@ dn::SimNode::SimNode(const std::string& nodeName, const std::string& nodeIP, uin
 	const std::string& adminIP, uint16_t adminRecvPort, uint16_t adminSendPort):
 	slowNode_(false),
 	running_(false),
-	pollitems_(nullptr),
-	pollCount_(0),
-	id_(-1)
+	id_(-1),
+	slowThread_(nullptr),
+	slowRunning_(false)
 {
 	setNodeName(nodeName);
 	setNodeIP(nodeIP);
@@ -23,6 +23,12 @@ dn::SimNode::SimNode(const std::string& nodeName, const std::string& nodeIP, uin
 
 dn::SimNode::~SimNode()
 {
+	if (slowNode_ && slowThread_)
+	{
+		// 等待慢速线程执行完
+		std::unique_lock<std::mutex> lock(slowMutex_);
+		delete slowThread_;
+	}
 }
 
 void dn::SimNode::setNodeName(const std::string& name)
@@ -110,6 +116,11 @@ void dn::SimNode::setSimStepCallback(SimStepCallback callback)
 	simStepCallback_ = std::move(callback);
 }
 
+void dn::SimNode::setSimStepBackCallback(SimStepCallback callback)
+{
+	replayStepBackCallback_ = std::move(callback);
+}
+
 void dn::SimNode::setReplayStepCallback(SimStepCallback callback)
 {
 	replayStepCallback_ = std::move(callback);
@@ -120,41 +131,39 @@ void dn::SimNode::working()
 	std::unique_lock<std::mutex> lock(workMutex_);
 
 	// 初始化监听列表
-	delete[] pollitems_;
-	pollCount_ = 1;
-	pollitems_ = new zmq_pollitem_t[chunks_.size() + 1];
-	pollitems_[0].socket = subSocket_;
-	pollitems_[0].fd = 0;
-	pollitems_[0].events = ZMQ_POLLIN;
+	pollitems_.clear();
+	zmq_pollitem_t item{ subSocket_, 0, ZMQ_POLLIN };
+	pollitems_.emplace_back(item);
 
-	// 一开始只能监听管理节点
-	int itemCount = 1;
 	while(!workStop_)
 	{
-		if(zmq_poll(pollitems_,itemCount,1) > 0)
+		for(auto i = 0;i < pollitems_.size();++i)
 		{
-			// 先处理指令信息
-			if(pollitems_[0].revents == ZMQ_POLLIN)
+			if(pollitems_[i].revents == ZMQ_POLLIN)
 			{
-				processAdminCommand();
+				if(i == 0)
+				{
+					processAdminCommand();
+				}
+				else
+				{
+					// 先读到缓存里
+					zmq_recv(chunkList_[i - 1].socket, chunkList_[i - 1].buffer.get(), chunkList_[i - 1].size, ZMQ_DONTWAIT);
+				}
 			}
 		}
 	}
-
-	delete[] pollitems_;
-	pollitems_ = nullptr;
 }
 
 bool dn::SimNode::sendReg()
 {
-	zmq_pollitem_t pollitem{ subSocket_,0,ZMQ_POLLIN };
 	json info;
 	info["name"] = nodeName_;
 	info["ip"] = nodeIP_;
 	info["slow"] = slowNode_;
 	auto chunksJson = json::array();
 	auto port = chunkPort_;
-	for(auto& it : chunks_)
+	for(auto& it : chunkList_)
 	{
 		json obj;
 		obj["name"] = it.name;
@@ -169,29 +178,12 @@ bool dn::SimNode::sendReg()
 	info["chunks"] = chunksJson;
 
 	const auto jsonStr = info.dump();
-	for(auto i = 0;i < 5;++i)
+	for(auto i = 0;i < 3;++i)
 	{
 		send2Admin(COMMAND_REG, jsonStr.data(), jsonStr.size());
-		if(zmq_poll(&pollitem,1,100) > 0)
-		{
-			auto len = recvMsg(subSocket_);
-			if(len < strlen(COMMAND_TOPIC))
-				continue;
-			if(inString() != COMMAND_TOPIC)
-				continue;
-			len = recvMsg(subSocket_);
-			auto* header = inHeader();
-			if(header->code != COMMAND_REG)
-				continue;
-			auto name = std::string(inData(), header->size);
-			if(name == nodeName_)
-			{
-				id_ = header->ID;
-				return true;
-			}
-		}
+		std::this_thread::sleep_for(std::chrono::milliseconds(50)); // 等待建立连接
 	}
-	return false;
+	return true;
 }
 
 void dn::SimNode::initSocket()
@@ -214,7 +206,7 @@ void dn::SimNode::initSocket()
 	zmq_connect(pubSocket_, pub.str().c_str());
 }
 
-void dn::SimNode::send2Admin(int code, const char* data, size_t size)
+void dn::SimNode::send2Admin(int code, const void* data, size_t size)
 {
 	assert(pubSocket_ != nullptr);
 	auto* header = reinterpret_cast<CommandHeader*>(outBuffer_);
@@ -241,27 +233,109 @@ void dn::SimNode::processAdminCommand()
 		return;
 	recvMsg(subSocket_);
 	auto* header = inHeader();
+	if(header->ID != ALL_NODE && header->ID != id_)
+		return;
+	if(header->code == COMMAND_STEP_FORWARD || header->code == COMMAND_STEP_BACKWARD)
+	{
+		// 拷贝仿真时间信息
+		memcpy_s(&curTime_, sizeof curTime_, inData(), sizeof curTime_);
+	}
 	switch (header->code)
 	{
 	case COMMAND_INIT:
 		init();
 		if (initCallback_)
 			initCallback_();
+		send2Admin(COMMAND_INIT);
 		break;
 	case COMMAND_START:
+		simSteps_ = 0;
+		curTime_ = 0;
 		if (startCallback_)
 			startCallback_();
 		break;
 	case COMMAND_STEP_FORWARD:
-		
-	case COMMAND_STEP_BACKWARD:
-	case COMMAND_PAUSE:
-	case COMMAND_STOP:
-	case COMMAND_RECORD:
-	case COMMAND_LOAD:
-	case COMMAND_SIM:
-	case COMMAND_REPLAY:
+		copyChunks();
+		if (!slowNode_)
+		{
+			if (simReplay_ && replayStepCallback_)
+				replayStepCallback_(simSteps_, curTime_);
+			else if (simStepCallback_)
+				simStepCallback_(simSteps_, curTime_);
+			++simSteps_;
+		}
+		else
+		{
+			// 慢速节点处理
+			if(!slowRunning_)
+			{
+				delete slowThread_;
+				slowThread_ = new std::thread([this]()
+					{
+						std::unique_lock<std::mutex> lock(slowMutex_);
+						slowRunning_ = true;
+						if (simReplay_ && replayStepCallback_)
+							replayStepCallback_(simSteps_, curTime_);
+						else if (simStepCallback_)
+							simStepCallback_(simSteps_, curTime_);
+						++simSteps_;
+						slowRunning_ = false;
+					});
+				slowThread_->detach();
+			}
+		}
+		sendChunks();
+		send2Admin(COMMAND_STEP_FORWARD,&simSteps_,sizeof simSteps_);
 		break;
+	case COMMAND_STEP_BACKWARD:
+		copyChunks();
+		if (!slowNode_)
+		{
+			if (simReplay_ && replayStepBackCallback_)
+				replayStepBackCallback_(simSteps_, curTime_);
+			else if (simStepCallback_)
+				simStepCallback_(simSteps_, curTime_);
+			--simSteps_;
+		}
+		else
+		{
+			// 慢速节点处理
+			if (!slowRunning_)
+			{
+				delete slowThread_;
+				slowThread_ = new std::thread([this]()
+					{
+						std::unique_lock<std::mutex> lock(slowMutex_);
+						slowRunning_ = true;
+						if (simReplay_ && replayStepBackCallback_)
+							replayStepBackCallback_(simSteps_, curTime_);
+						else if (simStepCallback_)
+							simStepCallback_(simSteps_, curTime_);
+						--simSteps_;
+						slowRunning_ = false;
+					});
+				slowThread_->detach();
+			}
+		}
+		sendChunks();
+		send2Admin(COMMAND_STEP_BACKWARD, &simSteps_, sizeof simSteps_);
+		break;
+	case COMMAND_PAUSE:
+		if (pauseCallback_)
+			pauseCallback_();
+		break;
+	case COMMAND_STOP:
+		if (stopCallback_)
+			stopCallback_();
+		break;
+	case COMMAND_RECORD:
+		break;//TODO
+	case COMMAND_LOAD:
+		break;//TODO
+	case COMMAND_SIM:
+		break;//TODO
+	case COMMAND_REPLAY:
+		break;//TODO
 	default:
 		break;
 	}
@@ -277,11 +351,10 @@ void dn::SimNode::init()
 		id_ = nodes[nodeName_]["id"].get<int>();
 	}
 	const auto& chunksInfo = info["chunks"];
-
+	pollitems_.resize(1); //仅保留接收指令的socket
 	// 初始化数据块
-	for(auto i = 0;i < chunks_.size();++i)
+	for (auto& chunk : chunkList_)
 	{
-		auto& chunk = chunks_[i];
 		if(chunksInfo.contains(chunk.name))
 		{
 			const auto& obj = chunksInfo[chunk.name];
@@ -292,7 +365,7 @@ void dn::SimNode::init()
 			{
 				chunk.socket = zmq_socket(socketContext_, ZMQ_PUB);
 				std::stringstream ss;
-				ss << "tcp://" << nodeIP_ << ":" << chunk.port;
+				ss << "tcp://*:" << chunk.port;
 				zmq_bind(chunk.socket, ss.str().c_str());
 				chunk.init = true;
 			}
@@ -304,41 +377,43 @@ void dn::SimNode::init()
 				chunk.init = false;
 			}
 			// 全部加入监听列表
-			pollitems_[i + 1].socket = chunk.socket;
-			pollitems_[i + 1].fd = 0;
-			pollitems_[i + 1].events = ZMQ_POLLIN;
+			zmq_pollitem_t item{ chunk.socket, 0, ZMQ_POLLIN };
+			pollitems_.emplace_back(item);
 		}
 	}
-	pollCount_ = 1 + chunks_.size();
-	while(true)
-	{
-		// 自己发布的挨个发布一遍 TODO:应该在所有人初始化完成前持续发送
-		for(auto& it : chunks_)
-		{
-			if(it.own)
-			{
-				sendChunk(it);
-			}
-		}
-		if(zmq_poll(pollitems_ + 1, chunks_.size(),100) > 0)
-		{
-			for(auto i = 0;i < chunks_.size();++i)
-			{
-				if(pollitems_[i + 1].revents & ZMQ_POLLIN)
-				{
-					recvMsg(pollitems_[i + 1].socket);
-					if(inString() == chunks_[i].name)
-					{
-						chunks_[i].init = true;
-					}
-				}
-			}
-		}
-	}
+	simTime_ = info["simTime"].get<double>();
+	simFree_ = info["free"].get<bool>();
+	simReplay_ = info["replay"].get<bool>();
+	stepTime_ = info["step"].get<uint32_t>();
+	recordName_ = info["record"].get<std::string>();
+	// 等待建立连接
+	std::this_thread::sleep_for(std::chrono::milliseconds(100));
 }
 
 void dn::SimNode::sendChunk(Chunk& chunk)
 {
 	zmq_send(chunk.socket, chunk.name.c_str(), chunk.name.size(), ZMQ_SNDMORE);
 	zmq_send(chunk.socket, chunk.pData, chunk.size, ZMQ_DONTWAIT);
+}
+
+void dn::SimNode::sendChunks()
+{
+	for (auto& it : chunkList_)
+		if (it.own)
+			sendChunk(it);
+}
+
+void dn::SimNode::copyChunks()
+{
+	for (auto& it : chunkList_)
+		if (!it.own)
+			memcpy_s(it.pData, it.size, it.buffer.get(), it.size);
+}
+
+void dn::SimNode::addChunk(const std::string& name, void* pData, size_t size, bool write)
+{
+	if(chunkSet_.count(name) > 0)
+		return;
+	chunkSet_.insert(name);
+	chunkList_.emplace_back(name,size,write,pData);
 }

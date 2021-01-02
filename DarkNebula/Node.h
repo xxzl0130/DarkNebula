@@ -10,6 +10,16 @@ namespace dn
 	public:
 		Node();
 		virtual ~Node();
+		
+		enum SimState
+		{
+			SimNop = 0,
+			SimInit,		// 初始化
+			SimStop,		// 停止中
+			SimRun = 0x10,	// 运行中
+			SimPause,		// 暂停中
+			SimStep,		// 单步模式
+		};
 
 		// 设置缓冲区大小，默认1MB
 		virtual void setBufferSize(size_t bytes);
@@ -20,7 +30,21 @@ namespace dn
 		// 获取当前仿真时间
 		double getSimTime() const;
 
+		// 获取仿真状态
+		SimState getSimState() const;
+		// 是否为自由仿真
+		bool isFreeSim() const;
+		// 是否为重放仿真
+		bool isReplaySim() const;
+		// 获取当前仿真时间
+		double getCurTime() const;
+		// 获取当前仿真步数
+		unsigned getCurSteps() const;
+		// 获取记录名称
+		std::string getRecordName() const;
+
 	protected:
+		
 		// 开始工作线程
 		void startWorking();
 		// 停止工作线程
@@ -62,6 +86,18 @@ namespace dn
 		uint32_t simSteps_;
 		// 当前仿真时间
 		double curTime_;
+		// 最长仿真时间
+		double simTime_;
+		// 自由仿真类型
+		bool simFree_;
+		// 回放仿真类型
+		bool simReplay_;
+		// 仿真步长,ms
+		uint32_t stepTime_;
+		// 仿真状态
+		SimState simState_;
+		// 记录名称
+		std::string recordName_;
 	};
 }
 

@@ -42,6 +42,26 @@ namespace dn
 		void setAdminRecvPort(uint16_t port);
 		// 管理节点发送指令的端口
 		void setAdminSendPort(uint16_t port);
+		/**
+		 * \brief 添加数据块
+		 * \tparam T 数据块类型
+		 * \param name 数据块名称，各节点之间同一个数据块的名称要保持一致
+		 * \param data 数据变量，每步仿真前数据会更新到这里
+		 * \param write 是否拥有该数据块写入权限
+		 */
+		template <typename T>
+		void addChunk(const std::string& name,T& data,bool write)
+		{
+			addChunk(name, &data, sizeof T, write);
+		}
+		/**
+		 * \brief 添加数据块
+		 * \param name 数据块名称，各节点之间同一个数据块的名称要保持一致
+		 * \param pData 数据变量指针，每步仿真前数据会更新到这里
+		 * \param size 数据大小
+		 * \param write 是否拥有该数据块写入权限
+		 */
+		void addChunk(const std::string& name, void* pData, size_t size, bool write);
 
 		// 注册，之后无法修改参数
 		bool regIn();
@@ -57,6 +77,8 @@ namespace dn
 		void setStopCallback(SimEventCallback callback);
 		// 仿真推进函数
 		void setSimStepCallback(SimStepCallback callback);
+		// 回放模式后退一步的回调函数，可以不设置，则使用推进函数
+		void setSimStepBackCallback(SimStepCallback callback);
 		// 回放推进函数，不设置时遇到回放将调用普通仿真函数
 		void setReplayStepCallback(SimStepCallback callback);
 
@@ -68,8 +90,6 @@ namespace dn
 			std::string name;
 			// 容量
 			size_t size = 0;
-			// 数据指针
-			void* pData = nullptr;
 			// 所有权限
 			bool own = false;
 			// 初始化
@@ -80,6 +100,13 @@ namespace dn
 			int id = 0;
 			// socket指针
 			void* socket = nullptr;
+			// 数据指针
+			void* pData = nullptr;
+			// 缓存指针
+			std::unique_ptr<char[]> buffer = nullptr;
+			Chunk(){}
+			Chunk(const std::string& n, size_t s, bool write, void* p) :
+				name(n), size(s),own(write), init(false),port(0),id(-1),socket(nullptr),pData(p),buffer(new char[size]){}
 		};
 		
 		// 运行线程
@@ -89,17 +116,21 @@ namespace dn
 		// 初始化
 		void initSocket();
 		// 向管理节点发送指令
-		void send2Admin(int code, const char* data = nullptr, size_t size = 0);
+		void send2Admin(int code, const void* data = nullptr, size_t size = 0);
 		// 处理管理节点指令
 		void processAdminCommand();
 		// 处理初始化信息
 		void init();
 		// 发送一个数据块
 		void sendChunk(Chunk& chunk);
+		// 发布自己所有要发布的数据块
+		void sendChunks();
+		// 将所有数据更新到用户数据里
+		void copyChunks();
 
 	private:
 		SimEventCallback initCallback_, startCallback_, pauseCallback_, stopCallback_;
-		SimStepCallback simStepCallback_, replayStepCallback_;
+		SimStepCallback simStepCallback_, replayStepCallback_, replayStepBackCallback_;
 
 		// 节点名称
 		std::string nodeName_;
@@ -119,13 +150,19 @@ namespace dn
 		bool running_;
 		
 		// 监听列表
-		zmq_pollitem_t* pollitems_;
-		// 监听数量
-		int pollCount_;
+		std::vector<zmq_pollitem_t> pollitems_;
 		// 数据块列表
-		std::vector<Chunk> chunks_;
+		std::vector<Chunk> chunkList_;
+		// 数据块集合
+		std::set<std::string> chunkSet_;
 		// 本节点id
 		int id_;
+		// 慢速节点锁
+		std::mutex slowMutex_;
+		// 慢速节点线程
+		std::thread* slowThread_;
+		// 慢速运行中
+		std::atomic_bool slowRunning_;
 	};
 }
 

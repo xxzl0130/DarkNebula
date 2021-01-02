@@ -11,7 +11,12 @@ dn::Node::Node():
 	workStop_(false),
 	outBuffer_(nullptr),
 	inBuffer_(nullptr),
-	bufferSize_(0)
+	bufferSize_(0),
+	simTime_(10),
+	simFree_(false),
+	simReplay_(false),
+	stepTime_(10),
+	simState_(SimNop)
 {
 	setBufferSize(1 * 1024 * 1024);
 }
@@ -59,6 +64,36 @@ uint32_t dn::Node::getSimStep() const
 double dn::Node::getSimTime() const
 {
 	return curTime_;
+}
+
+dn::Node::SimState dn::Node::getSimState() const
+{
+	return simState_;
+}
+
+bool dn::Node::isFreeSim() const
+{
+	return simFree_;
+}
+
+bool dn::Node::isReplaySim() const
+{
+	return simReplay_;
+}
+
+double dn::Node::getCurTime() const
+{
+	return curTime_;
+}
+
+unsigned dn::Node::getCurSteps() const
+{
+	return simSteps_;
+}
+
+std::string dn::Node::getRecordName() const
+{
+	return recordName_;
 }
 
 void dn::Node::startWorking()
