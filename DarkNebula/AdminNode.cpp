@@ -42,7 +42,9 @@ dn::AdminNode::~AdminNode()
 	zmq_close(pubSocket_);
 	zmq_close(subSocket_);
 	zmq_ctx_destroy(socketContext_);
-	delete[] inBuffer_;
+	if (inBuffer_)
+		zmq_msg_close(inBuffer_);
+	delete inBuffer_;
 	delete[] outBuffer_;
 }
 
