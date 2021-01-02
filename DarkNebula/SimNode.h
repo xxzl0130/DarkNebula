@@ -3,6 +3,10 @@
 #include <thread>
 #include <string>
 #include <cstdint>
+#include <mutex>
+#include <vector>
+
+
 
 #include "DarkNebulaGlobal.h"
 
@@ -13,7 +17,7 @@ namespace dn
 	// 仿真推进回调函数
 	typedef std::function<void(uint32_t,double)> SimStepCallback;
 	
-	class SimNode
+	class DN_EXPORT SimNode
 	{
 	public:
 		/**
@@ -28,7 +32,8 @@ namespace dn
 		 */
 		SimNode(const std::string& nodeName, const std::string& nodeIP = "127.0.0.1", uint16_t chunkPort = 10000, bool slowNode = false,
 			const std::string& adminIP = "127.0.0.1", uint16_t adminRecvPort = ADMIN_RECEIVE_PORT, uint16_t adminSendPort = ADMIN_SEND_PORT);
-
+		~SimNode();
+		
 		/// 节点参数设置，需要在注册以前设置
 		// 节点名称
 		void setNodeName(const std::string& name);
@@ -46,9 +51,7 @@ namespace dn
 		void setAdminSendPort(uint16_t port);
 
 		// 注册，之后无法修改参数
-		void signIn();
-		// 取消注册，此时可以修改参数
-		void signOut();
+		bool regIn();
 
 		/// 回调函数设置，注意回调函数均运行在子线程
 		// 仿真初始化回调函数
@@ -67,7 +70,32 @@ namespace dn
 		// 获取当前仿真步数
 		uint32_t getSimStep() const;
 		// 获取当前仿真时间
-		double getSimTime();
+		double getSimTime() const;
+
+	private:
+		// 运行线程
+		void working();
+		// 停止
+		void stop();
+		// 发送注册消息
+		bool sendReg();
+		// 初始化
+		void initSocket();
+
+		// 数据块定义
+		struct Chunk
+		{
+			// 名称
+			std::string name;
+			// 容量
+			size_t size = 0;
+			// 所有权限
+			bool own = false;
+			// 端口
+			uint16_t port = 0;
+			// socket指针
+			void* socket;
+		};
 
 	private:
 		SimEventCallback initCallback_, startCallback_, pauseCallback_, stopCallback_;
@@ -95,6 +123,21 @@ namespace dn
 		bool slowNode_;
 		// 运行中
 		bool running_;
+		// 通信线程停止标志
+		bool comStop_;
+		// 通信线程锁
+		std::mutex workMutex_;
+		// 通信线程
+		std::thread* workThread_;
+
+		// socket环境
+		void* socketContext_;
+		// 向管理节点发布指令的socket
+		void* pubSocket_;
+		// 从管理节点接收指令的socket
+		void* subSocket_;
+		// 数据块列表
+		std::vector<Chunk> chunks_;
 	};
 }
 

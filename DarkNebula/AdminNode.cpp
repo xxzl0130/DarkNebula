@@ -472,6 +472,8 @@ void dn::AdminNode::nodeReg(char* buffer, int len)
 			nodeList_[id].chunks.emplace_back(chunkID, own);
 		}
 	}
+	// 回报注册通过
+	sendCommand(id, COMMAND_REG, name.size(), name.c_str());
 	if (registerCallback_)
 		registerCallback_(id);
 }

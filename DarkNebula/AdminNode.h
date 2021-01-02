@@ -193,7 +193,7 @@ namespace dn
 		// 监听线程
 		std::thread* listenThread_;
 		// 监听线程停止标志
-		std::atomic_bool listenStop_;
+		bool listenStop_;
 		// 缓冲区
 		char* inBuffer, *outBuffer;
 		// 缓冲区大小
