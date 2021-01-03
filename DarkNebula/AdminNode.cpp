@@ -2,7 +2,6 @@
 
 #include <cassert>
 #include <functional>
-#include <iostream>
 #include <zmq.h>
 #include <sstream>
 #include <thread>
@@ -25,13 +24,6 @@ dn::AdminNode::AdminNode(uint16_t receivePort, uint16_t sendPort):
 dn::AdminNode::~AdminNode()
 {
 	stopWorking();
-	zmq_close(pubSocket_);
-	zmq_close(subSocket_);
-	zmq_ctx_destroy(socketContext_);
-	if (inBuffer_)
-		zmq_msg_close(inBuffer_);
-	delete inBuffer_;
-	delete[] outBuffer_;
 }
 
 void dn::AdminNode::setReceivePort(uint16_t port)
@@ -45,6 +37,8 @@ void dn::AdminNode::setReceivePort(uint16_t port)
 		zmq_close(subSocket_);
 	}
 	subSocket_ = zmq_socket(socketContext_, ZMQ_SUB);
+	int linger = 0;
+	zmq_setsockopt(pubSocket_, ZMQ_LINGER, &linger, sizeof linger);
 	std::stringstream ss;
 	ss << "tcp://*:" << receivePort_;
 	assert(zmq_bind(subSocket_, ss.str().c_str()) == 0);
@@ -68,6 +62,8 @@ void dn::AdminNode::setSendPort(uint16_t port)
 		zmq_close(pubSocket_);
 	}
 	pubSocket_ = zmq_socket(socketContext_, ZMQ_PUB);
+	int linger = 0;
+	zmq_setsockopt(pubSocket_, ZMQ_LINGER, &linger, sizeof linger);
 	std::stringstream ss;
 	ss << "tcp://*:" << sendPort_;
 	assert(zmq_bind(pubSocket_, ss.str().c_str()) == 0);
@@ -84,7 +80,7 @@ size_t dn::AdminNode::getNodeCount() const
 	return nodeList_.size();
 }
 
-std::vector<dn::NodeInfo> dn::AdminNode::getNodeList() const
+const std::vector<dn::NodeInfo>& dn::AdminNode::getNodeList() const
 {
 	return nodeList_;
 }
@@ -94,7 +90,7 @@ size_t dn::AdminNode::getChunkCount() const
 	return chunkList_.size();
 }
 
-std::vector<dn::ChunkInfo> dn::AdminNode::getChunkList() const
+const std::vector<dn::ChunkInfo>& dn::AdminNode::getChunkList() const
 {
 	return chunkList_;
 }
@@ -135,7 +131,6 @@ void dn::AdminNode::setStepTime(unsigned ms)
 	if (simState_ > SimStop)
 		return;
 	stepTime_ = ms;
-	timer_.setInterval(ms);
 }
 
 void dn::AdminNode::setRecord(bool enable, char const* name)
@@ -209,8 +204,10 @@ void dn::AdminNode::startSim()
 		simSteps_ = 0;
 		curTime_ = 0.0;
 		curStepTime_ = 0.0;
-		sendCommand(ALL_NODE, COMMAND_START,sizeof curTime_ + sizeof simSteps_, &simSteps_);
+		sendCommand(ALL_NODE, COMMAND_START,sizeof curTime_, &curTime_);
 		simState_ = SimRun;
+		if(stepTime_ > 1)
+			curStepTime_ = stepTime_ - 1;
 		timer_.start();
 	}
 }
@@ -219,7 +216,7 @@ void dn::AdminNode::pauseSim()
 {
 	if(simState_ != SimRun)
 		return;
-	sendCommand(ALL_NODE, COMMAND_PAUSE, sizeof curTime_ + sizeof simSteps_, &simSteps_);
+	sendCommand(ALL_NODE, COMMAND_PAUSE, sizeof curTime_, &curTime_);
 	simState_ = SimPause;
 }
 
@@ -229,7 +226,7 @@ void dn::AdminNode::stopSim()
 	{
 		return;
 	}
-	sendCommand(ALL_NODE, COMMAND_STOP, sizeof curTime_ + sizeof simSteps_, &simSteps_);
+	sendCommand(ALL_NODE, COMMAND_STOP, sizeof curTime_, &curTime_);
 	simState_ = SimStop;
 }
 
@@ -251,21 +248,21 @@ void dn::AdminNode::stepBackward()
 		return;
 	--simSteps_;
 	curTime_ = static_cast<double>(simSteps_) * stepTime_ / 1000.0;
-	sendCommand(ALL_NODE, COMMAND_STEP_BACKWARD, sizeof curTime_ + sizeof simSteps_, &simSteps_);
+	sendCommand(ALL_NODE, COMMAND_STEP_BACKWARD, sizeof curTime_, &curTime_);
 	simState_ = SimStep;
 }
 
-void dn::AdminNode::onInitOver(AdminCallback callback)
+void dn::AdminNode::setInitOverCallback(AdminCallback callback)
 {
 	initCallback_ = std::move(callback);
 }
 
-void dn::AdminNode::onRegister(AdminCallback callback)
+void dn::AdminNode::setRegisterCallback(AdminCallback callback)
 {
 	registerCallback_ = std::move(callback);
 }
 
-void dn::AdminNode::onAdvance(AdminCallback callback)
+void dn::AdminNode::setAdvanceCallback(AdminCallback callback)
 {
 	advanceCallback_ = std::move(callback);
 }
@@ -419,7 +416,7 @@ void dn::AdminNode::nodeInit(char* buffer, int len)
 	bool ok = false;
 	if(header->size)
 	{
-		ok = *reinterpret_cast<bool*>(buffer + sizeof CommandHeader + 1);
+		ok = *reinterpret_cast<bool*>(inData());
 	}
 	if(header->ID < nodeList_.size())
 	{
@@ -439,7 +436,7 @@ void dn::AdminNode::nodeStep(char* buffer, int len)
 	int step = 0;
 	if (header->size)
 	{
-		step = *reinterpret_cast<int*>(buffer + sizeof CommandHeader + 1);
+		step = *reinterpret_cast<int*>(inData());
 	}
 	if (header->ID < nodeList_.size())
 	{

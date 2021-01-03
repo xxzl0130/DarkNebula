@@ -24,13 +24,19 @@ dn::Node::Node():
 dn::Node::~Node()
 {
 	stopWorking();
-	zmq_close(pubSocket_);
-	zmq_close(subSocket_);
+	if (pubSocket_)
+	{
+		zmq_close(pubSocket_);
+	}
+	if (subSocket_)
+	{
+		zmq_close(subSocket_);
+	}
 	delete[] outBuffer_;
 	if (inBuffer_)
 		zmq_msg_close(inBuffer_);
 	delete inBuffer_;
-	zmq_ctx_destroy(socketContext_);
+	zmq_ctx_term(socketContext_);
 }
 
 void dn::Node::setBufferSize(size_t bytes)

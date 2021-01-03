@@ -23,12 +23,18 @@ dn::SimNode::SimNode(const std::string& nodeName, const std::string& nodeIP, uin
 
 dn::SimNode::~SimNode()
 {
+	// 要在这先停止工作，不然一些变量会被析构造成错误
+	stopWorking();
 	if (slowNode_ && slowThread_)
 	{
 		// 等待慢速线程执行完
 		std::unique_lock<std::mutex> lock(slowMutex_);
 		delete slowThread_;
 	}
+	// 清理数据块的socket
+	for (auto& it : chunkList_)
+		if (it.socket)
+			zmq_close(it.socket);
 }
 
 void dn::SimNode::setNodeName(const std::string& name)
@@ -88,6 +94,7 @@ bool dn::SimNode::regIn()
 	if (!sendReg())
 		return false;
 	startWorking();
+	running_ = true;
 	return true;
 }
 
@@ -129,26 +136,28 @@ void dn::SimNode::setReplayStepCallback(SimStepCallback callback)
 void dn::SimNode::working()
 {
 	std::unique_lock<std::mutex> lock(workMutex_);
-
 	// 初始化监听列表
 	pollitems_.clear();
 	zmq_pollitem_t item{ subSocket_, 0, ZMQ_POLLIN };
 	pollitems_.emplace_back(item);
 
-	while(!workStop_)
+	while(!workStop_ && !pollitems_.empty())
 	{
-		for(auto i = 0;i < pollitems_.size();++i)
+		if (zmq_poll(pollitems_.data(), pollitems_.size(), 1) > 0)
 		{
-			if(pollitems_[i].revents == ZMQ_POLLIN)
+			for (auto i = 0; i < pollitems_.size(); ++i)
 			{
-				if(i == 0)
+				if (pollitems_[i].revents == ZMQ_POLLIN)
 				{
-					processAdminCommand();
-				}
-				else
-				{
-					// 先读到缓存里
-					zmq_recv(chunkList_[i - 1].socket, chunkList_[i - 1].buffer.get(), chunkList_[i - 1].size, ZMQ_DONTWAIT);
+					if (i == 0)
+					{
+						processAdminCommand();
+					}
+					else
+					{
+						// 先读到缓存里
+						zmq_recv(chunkList_[i - 1].socket, chunkList_[i - 1].buffer.get(), chunkList_[i - 1].size, ZMQ_DONTWAIT);
+					}
 				}
 			}
 		}
@@ -178,32 +187,33 @@ bool dn::SimNode::sendReg()
 	info["chunks"] = chunksJson;
 
 	const auto jsonStr = info.dump();
-	for(auto i = 0;i < 3;++i)
-	{
-		send2Admin(COMMAND_REG, jsonStr.data(), jsonStr.size());
-		std::this_thread::sleep_for(std::chrono::milliseconds(50)); // 等待建立连接
-	}
+	send2Admin(COMMAND_REG, jsonStr.data(), jsonStr.size());
 	return true;
 }
 
 void dn::SimNode::initSocket()
 {
+	int linger = 0;
 	// 初始化subSocket_
 	if (subSocket_)
 		zmq_close(subSocket_);
 	subSocket_ = zmq_socket(socketContext_, ZMQ_SUB);
 	std::stringstream sub;
 	sub << "tcp://" << adminIP_ << ":" << adminSendPort_;
-	zmq_connect(subSocket_, sub.str().c_str());
 	zmq_setsockopt(subSocket_, ZMQ_SUBSCRIBE, COMMAND_TOPIC, strlen(COMMAND_TOPIC));
-
+	zmq_setsockopt(subSocket_, ZMQ_LINGER, &linger, sizeof linger);
+	zmq_connect(subSocket_, sub.str().c_str());
+	
 	// 初始化pub
 	if (pubSocket_)
 		zmq_close(pubSocket_);
 	pubSocket_ = zmq_socket(socketContext_, ZMQ_PUB);
 	std::stringstream pub;
 	pub << "tcp://" << adminIP_ << ":" << adminRecvPort_;
+	zmq_setsockopt(pubSocket_, ZMQ_LINGER, &linger, sizeof linger);
 	zmq_connect(pubSocket_, pub.str().c_str());
+	// 等待连接
+	std::this_thread::sleep_for(std::chrono::milliseconds(50));
 }
 
 void dn::SimNode::send2Admin(int code, const void* data, size_t size)
@@ -244,18 +254,32 @@ void dn::SimNode::processAdminCommand()
 	{
 	case COMMAND_INIT:
 		init();
+		simState_ = SimInit;
 		if (initCallback_)
 			initCallback_();
-		send2Admin(COMMAND_INIT);
+		// 先把初始化的值拷贝到缓存，下一步前会再拷回来，不然会覆盖垃圾值
+		for(auto& it : chunkList_)
+		{
+			if(!it.own)
+			{
+				memcpy_s(it.buffer.get(), it.size, it.pData, it.size);
+			}
+		}
+		{
+			auto ok = true;
+			send2Admin(COMMAND_INIT, &ok, sizeof ok);
+		}
 		break;
 	case COMMAND_START:
 		simSteps_ = 0;
 		curTime_ = 0;
+		simState_ = SimRun;
 		if (startCallback_)
 			startCallback_();
 		break;
 	case COMMAND_STEP_FORWARD:
 		copyChunks();
+		simState_ = SimRun;
 		if (!slowNode_)
 		{
 			if (simReplay_ && replayStepCallback_)
@@ -285,10 +309,11 @@ void dn::SimNode::processAdminCommand()
 			}
 		}
 		sendChunks();
-		send2Admin(COMMAND_STEP_FORWARD,&simSteps_,sizeof simSteps_);
+		send2Admin(COMMAND_STEP_FORWARD, &simSteps_, sizeof simSteps_);
 		break;
 	case COMMAND_STEP_BACKWARD:
 		copyChunks();
+		simState_ = SimRun;
 		if (!slowNode_)
 		{
 			if (simReplay_ && replayStepBackCallback_)
@@ -321,10 +346,12 @@ void dn::SimNode::processAdminCommand()
 		send2Admin(COMMAND_STEP_BACKWARD, &simSteps_, sizeof simSteps_);
 		break;
 	case COMMAND_PAUSE:
+		simState_ = SimPause;
 		if (pauseCallback_)
 			pauseCallback_();
 		break;
 	case COMMAND_STOP:
+		simState_ = SimStop;
 		if (stopCallback_)
 			stopCallback_();
 		break;
@@ -387,7 +414,7 @@ void dn::SimNode::init()
 	stepTime_ = info["step"].get<uint32_t>();
 	recordName_ = info["record"].get<std::string>();
 	// 等待建立连接
-	std::this_thread::sleep_for(std::chrono::milliseconds(100));
+	std::this_thread::sleep_for(std::chrono::milliseconds(50));
 }
 
 void dn::SimNode::sendChunk(Chunk& chunk)

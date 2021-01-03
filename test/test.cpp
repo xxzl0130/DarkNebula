@@ -1,6 +1,7 @@
 ﻿#include <iostream>
 #include <zmq.h>
 #include <DarkNebula/AdminNode.h>
+#include <DarkNebula/SimNode.h>
 #include <nlohmann/json.hpp>
 #include <thread>
 using namespace std;
@@ -8,59 +9,60 @@ using namespace std;
 int main()
 {
 	dn::AdminNode admin(16666,18888);
-	auto* ctx = zmq_ctx_new();
-	auto* sub = zmq_socket(ctx, ZMQ_SUB);
-	auto* pub = zmq_socket(ctx, ZMQ_PUB);
-	zmq_connect(sub, "tcp://127.0.0.1:18888");
-	zmq_connect(pub, "tcp://127.0.0.1:16666");
-	zmq_setsockopt(sub, ZMQ_SUBSCRIBE, dn::COMMAND_TOPIC, strlen(dn::COMMAND_TOPIC));
-	char buffer[128] = {};
-	std::thread th([&]()
+	admin.setRegisterCallback([&](int id)
 		{
-			zmq_pollitem_t item{ sub,0,ZMQ_POLLIN };
-				if(zmq_poll(&item,1,1000))
-				{
-					zmq_recv(sub, buffer, 128, 0);
-					if(strcmp(buffer,dn::COMMAND_TOPIC) == 0)
-					{
-						cout << dn::COMMAND_TOPIC << endl;
-						zmq_recv(sub, buffer, 128, 0);
-						auto* header = reinterpret_cast<dn::CommandHeader*>(buffer);
-						cout << "receive: id=" << header->ID << " code=" << header->code << " size=" << header->size << endl;
-					}
-				}
-				std::this_thread::sleep_for(chrono::seconds(10));
+			const auto node = admin.getNodeList()[id];
+			cout << "Register: " << node.name << " " << node.ip << endl;
+			cout << "Chunks:\n";
+			const auto& chunks = admin.getChunkList();
+			for(auto& it : node.chunks)
+			{
+				cout << chunks[it.first].first << " " << it.second << endl;
+			}
 		});
-	th.detach();
-	this_thread::sleep_for(chrono::milliseconds(100));
+	admin.setInitOverCallback([&](int id)
+		{
+			if (id == dn::ALL_NODE)
+			{
+				cout << "All init!" << endl;
+				return;
+			}
+			const auto node = admin.getNodeList()[id];
+			cout << "Init :" << node.name << endl;
+		});
+	admin.setStepTime(10);
+	admin.setSimTime(10);
+	
+	dn::SimNode node1("node1", "127.0.0.1", 20000, false, "127.0.0.1", 16666, 18888);
+	dn::SimNode node2("node2", "127.0.0.1", 30000, false, "127.0.0.1", 16666, 18888);
+	int counter = 0;
+	node1.addChunk("counter", counter, true);
+	node1.regIn();
+	node1.setInitCallback([&]()
+	{
+		counter = 0;
+	});
+	node1.setSimStepCallback([&](unsigned step, double time)
+		{
+			cout << "Node 1: " << ++counter << endl;
+		});
+	int counterRecv = 0;
+	node2.addChunk("counter", counterRecv, false);
+	node2.regIn();
+	node2.setInitCallback([&]() {counterRecv = 0; });
+	node2.setSimStepCallback([&](unsigned step, double time)
+		{
+			cout << "Node 2: " << counterRecv << endl;
+		});
+	
+	//system("pause");
+	Sleep(100);
 	admin.initSim();
-	this_thread::sleep_for(chrono::milliseconds(100));
-	const auto* str = R"({
-		"name":"test",
-		"ip":"127.0.0.1",
-		"slow":false,
-		"chunks":[
-		{
-			"name":"AA",
-			"own":false
-		},
-		{
-			"name":"BB",
-			"own":true,
-			"port":23333
-		}
-	]})";
-	auto* header = reinterpret_cast<dn::CommandHeader*>(buffer);
-	header->ID = 0;
-	header->code = dn::COMMAND_REG;
-	header->size = strlen(str);
-	memcpy_s(buffer + sizeof dn::CommandHeader, header->size, str, header->size);
-	zmq_send(pub, dn::REPLY_TOPIC, strlen(dn::REPLY_TOPIC), ZMQ_SNDMORE);
-	zmq_send(pub, buffer, header->size + sizeof dn::CommandHeader, 0);
-	std::cerr << zmq_strerror(zmq_errno()) << std::endl;
-	this_thread::sleep_for(chrono::milliseconds(3000));
-	zmq_close(sub);
-	zmq_close(pub);
-	zmq_ctx_destroy(ctx);
+	Sleep(100);
+	//system("pause");
+	//admin.startSim();
+
+	Sleep(1000);
+	
 	return 0;
 }

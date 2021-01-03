@@ -60,12 +60,12 @@ namespace dn
 		// 获取节点数目
 		size_t getNodeCount() const;
 		// 获取节点信息
-		std::vector<NodeInfo> getNodeList() const;
+		const std::vector<NodeInfo>& getNodeList() const;
 
 		// 获取数据块数目
 		size_t getChunkCount() const;
 		// 获取数据块信息
-		std::vector<ChunkInfo> getChunkList() const;
+		const std::vector<ChunkInfo>& getChunkList() const;
 
 		// 清除所有已经注册的节点信息
 		void clear();
@@ -106,11 +106,11 @@ namespace dn
 
 		/// 回调函数
 		// 初始化完成
-		void onInitOver(AdminCallback callback);
+		void setInitOverCallback(AdminCallback callback);
 		// 注册
-		void onRegister(AdminCallback callback);
+		void setRegisterCallback(AdminCallback callback);
 		// 推进
-		void onAdvance(AdminCallback callback);
+		void setAdvanceCallback(AdminCallback callback);
 
 	private:
 		// 监听函数
