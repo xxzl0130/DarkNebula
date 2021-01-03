@@ -21,6 +21,13 @@ namespace dn
 			SimStep,		// 单步模式
 		};
 
+		enum ReplayState
+		{
+			ReplayNop = 0,
+			Recording = 0x10,		// 记录数据
+			Replaying = 0x20,		// 重放数据
+		};
+
 		// 设置缓冲区大小，默认1MB
 		virtual void setBufferSize(size_t bytes);
 		size_t getBufferSize();
@@ -90,12 +97,12 @@ namespace dn
 		double simTime_;
 		// 自由仿真类型
 		bool simFree_;
-		// 回放仿真类型
-		bool simReplay_;
 		// 仿真步长,ms
 		uint32_t stepTime_;
 		// 仿真状态
 		SimState simState_;
+		// 回放状态
+		int replayState_;
 		// 记录名称
 		std::string recordName_;
 	};

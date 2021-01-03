@@ -5,13 +5,43 @@
 #include <nlohmann/json.hpp>
 using nlohmann::json;
 
+namespace dn
+{
+	// 数据块定义
+	struct Chunk
+	{
+		// 名称
+		std::string name;
+		// 容量
+		size_t size = 0;
+		// 所有权限
+		bool own = false;
+		// 端口
+		uint16_t port = 0;
+		// 编号
+		int id = 0;
+		// socket指针
+		void* socket = nullptr;
+		// 数据指针
+		void* pData = nullptr;
+		// 缓存指针
+		std::unique_ptr<char[]> buffer = nullptr;
+		Chunk() {}
+		Chunk(const std::string& n, size_t s, bool write, void* p) :
+			name(n), size(s), own(write), id(-1), pData(p), buffer(new char[size]) {}
+	};
+}
+
 dn::SimNode::SimNode(const std::string& nodeName, const std::string& nodeIP, uint16_t chunkPort, bool slowNode,
 	const std::string& adminIP, uint16_t adminRecvPort, uint16_t adminSendPort):
 	slowNode_(false),
 	running_(false),
 	id_(-1),
 	slowThread_(nullptr),
-	slowRunning_(false)
+	slowRunning_(false),
+	recordFile_(nullptr),
+	recordSize_(0),
+	recordBuffer_(nullptr)
 {
 	setNodeName(nodeName);
 	setNodeIP(nodeIP);
@@ -141,23 +171,22 @@ void dn::SimNode::working()
 	zmq_pollitem_t item{ subSocket_, 0, ZMQ_POLLIN };
 	pollitems_.emplace_back(item);
 
-	while(!workStop_ && !pollitems_.empty())
+	while (!workStop_ && !pollitems_.empty())
 	{
-		if (zmq_poll(pollitems_.data(), pollitems_.size(), 1) > 0)
+		if (zmq_poll(pollitems_.data(), pollitems_.size(), 1) <= 0)
+			continue;
+		for (auto i = 0; i < pollitems_.size(); ++i)
 		{
-			for (auto i = 0; i < pollitems_.size(); ++i)
+			if (pollitems_[i].revents == ZMQ_POLLIN)
 			{
-				if (pollitems_[i].revents == ZMQ_POLLIN)
+				if (i == 0)
 				{
-					if (i == 0)
-					{
-						processAdminCommand();
-					}
-					else
-					{
-						// 先读到缓存里
-						zmq_recv(chunkList_[i - 1].socket, chunkList_[i - 1].buffer.get(), chunkList_[i - 1].size, ZMQ_DONTWAIT);
-					}
+					processAdminCommand();
+				}
+				else
+				{
+					// 先读到缓存里
+					zmq_recv(chunkList_[i - 1].socket, chunkList_[i - 1].buffer.get(), chunkList_[i - 1].size, ZMQ_DONTWAIT);
 				}
 			}
 		}
@@ -235,7 +264,6 @@ void dn::SimNode::send2Admin(int code, const void* data, size_t size)
 	zmq_send(pubSocket_, outBuffer_, size + sizeof CommandHeader, 0);
 }
 
-
 void dn::SimNode::processAdminCommand()
 {
 	recvMsg(subSocket_);
@@ -253,22 +281,26 @@ void dn::SimNode::processAdminCommand()
 	switch (header->code)
 	{
 	case COMMAND_INIT:
-		init();
+	{
+		auto ok = init();
+		if(!ok)
+		{
+			send2Admin(COMMAND_INIT, &ok, sizeof ok);
+			break;
+		}
 		simState_ = SimInit;
 		if (initCallback_)
 			initCallback_();
 		// 先把初始化的值拷贝到缓存，下一步前会再拷回来，不然会覆盖垃圾值
-		for(auto& it : chunkList_)
+		for (auto& it : chunkList_)
 		{
-			if(!it.own)
+			if (!it.own)
 			{
 				memcpy_s(it.buffer.get(), it.size, it.pData, it.size);
 			}
 		}
-		{
-			auto ok = true;
-			send2Admin(COMMAND_INIT, &ok, sizeof ok);
-		}
+		send2Admin(COMMAND_INIT, &ok, sizeof ok);
+	}
 		break;
 	case COMMAND_START:
 		simSteps_ = 0;
@@ -282,7 +314,7 @@ void dn::SimNode::processAdminCommand()
 		simState_ = SimRun;
 		if (!slowNode_)
 		{
-			if (simReplay_ && replayStepCallback_)
+			if (replayState_ == Replaying && replayStepCallback_)
 				replayStepCallback_(simSteps_, curTime_);
 			else if (simStepCallback_)
 				simStepCallback_(simSteps_, curTime_);
@@ -298,7 +330,7 @@ void dn::SimNode::processAdminCommand()
 					{
 						std::unique_lock<std::mutex> lock(slowMutex_);
 						slowRunning_ = true;
-						if (simReplay_ && replayStepCallback_)
+						if (replayState_ == Replaying && replayStepCallback_)
 							replayStepCallback_(simSteps_, curTime_);
 						else if (simStepCallback_)
 							simStepCallback_(simSteps_, curTime_);
@@ -316,7 +348,7 @@ void dn::SimNode::processAdminCommand()
 		simState_ = SimRun;
 		if (!slowNode_)
 		{
-			if (simReplay_ && replayStepBackCallback_)
+			if (replayState_ == Replaying && replayStepBackCallback_)
 				replayStepBackCallback_(simSteps_, curTime_);
 			else if (simStepCallback_)
 				simStepCallback_(simSteps_, curTime_);
@@ -332,7 +364,7 @@ void dn::SimNode::processAdminCommand()
 					{
 						std::unique_lock<std::mutex> lock(slowMutex_);
 						slowRunning_ = true;
-						if (simReplay_ && replayStepBackCallback_)
+						if (replayState_ == Replaying && replayStepBackCallback_)
 							replayStepBackCallback_(simSteps_, curTime_);
 						else if (simStepCallback_)
 							simStepCallback_(simSteps_, curTime_);
@@ -355,23 +387,21 @@ void dn::SimNode::processAdminCommand()
 		if (stopCallback_)
 			stopCallback_();
 		break;
-	case COMMAND_RECORD:
-		break;//TODO
-	case COMMAND_LOAD:
-		break;//TODO
-	case COMMAND_SIM:
-		break;//TODO
-	case COMMAND_REPLAY:
-		break;//TODO
 	default:
 		break;
 	}
 }
 
-void dn::SimNode::init()
+bool dn::SimNode::init()
 {
 	auto* header = inHeader();
 	auto info = json::parse(std::string(inData(), header->size));
+	simTime_ = info["simTime"].get<double>();
+	simFree_ = info["free"].get<bool>();
+	replayState_ = info["replay"].get<int>();
+	stepTime_ = info["step"].get<uint32_t>();
+	recordName_ = info["record"].get<std::string>();
+	
 	const auto& nodes = info["nodes"];
 	if(nodes.contains(nodeName_))
 	{
@@ -379,6 +409,7 @@ void dn::SimNode::init()
 	}
 	const auto& chunksInfo = info["chunks"];
 	pollitems_.resize(1); //仅保留接收指令的socket
+	recordSize_ = 0;
 	// 初始化数据块
 	for (auto& chunk : chunkList_)
 	{
@@ -394,33 +425,72 @@ void dn::SimNode::init()
 				std::stringstream ss;
 				ss << "tcp://*:" << chunk.port;
 				zmq_bind(chunk.socket, ss.str().c_str());
-				chunk.init = true;
+				recordSize_ += chunk.size;
 			}
 			else
 			{
 				chunk.socket = zmq_socket(socketContext_, ZMQ_SUB);
 				zmq_connect(chunk.socket,obj["path"].get<std::string>().c_str());
 				zmq_setsockopt(chunk.socket, ZMQ_SUBSCRIBE, chunk.name.c_str(), chunk.name.size());
-				chunk.init = false;
 			}
 			// 全部加入监听列表
 			zmq_pollitem_t item{ chunk.socket, 0, ZMQ_POLLIN };
 			pollitems_.emplace_back(item);
 		}
 	}
-	simTime_ = info["simTime"].get<double>();
-	simFree_ = info["free"].get<bool>();
-	simReplay_ = info["replay"].get<bool>();
-	stepTime_ = info["step"].get<uint32_t>();
-	recordName_ = info["record"].get<std::string>();
+
+	recordBuffer_.reset(new char[recordSize_]);
+	auto filename = recordFolder_ + "/" + recordName_ + RECORD_FILE_SUFFIX;
+	if (recordFile_)
+		fclose(recordFile_);
+	if(replayState_ == Replaying)
+	{
+		if(fopen_s(&recordFile_, filename.c_str(), "rb") == 0)
+		{
+			uint32_t magic;
+			fread_s(&magic, sizeof magic, 1, sizeof magic, recordFile_);
+			if(magic != RECORD_FILE_MAGIC)
+			{
+				fclose(recordFile_);
+				recordFile_ = nullptr;
+				return false;
+			}
+		}
+		else
+		{
+			recordFile_ = nullptr;
+			return false;
+		}
+	}
+	else if(replayState_ == Recording)
+	{
+		if(fopen_s(&recordFile_, filename.c_str(), "wb") == 0) // 写入magic
+		{
+			auto magic = RECORD_FILE_MAGIC;
+			fwrite(&magic, 1, sizeof magic, recordFile_);
+			fflush(recordFile_);
+		}
+		else
+		{
+			recordFile_ = nullptr;
+			return false;
+		}
+	}
+	
 	// 等待建立连接
 	std::this_thread::sleep_for(std::chrono::milliseconds(50));
+	return true;
 }
 
 void dn::SimNode::sendChunk(Chunk& chunk)
 {
 	zmq_send(chunk.socket, chunk.name.c_str(), chunk.name.size(), ZMQ_SNDMORE);
 	zmq_send(chunk.socket, chunk.pData, chunk.size, ZMQ_DONTWAIT);
+	if (replayState_ == Recording && recordFile_) // 写入数据
+	{
+		fwrite(chunk.pData, 1, chunk.size, recordFile_);
+		fflush(recordFile_);
+	}
 }
 
 void dn::SimNode::sendChunks()
@@ -437,10 +507,64 @@ void dn::SimNode::copyChunks()
 			memcpy_s(it.pData, it.size, it.buffer.get(), it.size);
 }
 
+void dn::SimNode::loadNext()
+{
+	if (replayState_ == Replaying && recordFile_)
+	{
+		fread_s(recordBuffer_.get(), recordSize_, 1, recordSize_, recordFile_);
+		size_t offset = 0;
+		for (auto& it : chunkList_)
+		{
+			if (it.own)
+			{
+				memcpy_s(it.pData, it.size, recordBuffer_.get() + offset, it.size);
+				offset += it.size;
+			}
+		}
+		if(feof(recordFile_))
+		{
+			fclose(recordFile_);
+			recordFile_ = nullptr;
+		}
+	}
+}
+
+void dn::SimNode::loadBack()
+{
+
+	if (replayState_ == Replaying && recordFile_)
+	{
+		// 向前偏移两倍
+		fseek(recordFile_, -static_cast<long>(recordSize_ * 2), SEEK_CUR);
+		fread_s(recordBuffer_.get(), recordSize_, 1, recordSize_, recordFile_);
+		size_t offset = 0;
+		for (auto& it : chunkList_)
+		{
+			if (it.own)
+			{
+				memcpy_s(it.pData, it.size, recordBuffer_.get() + offset, it.size);
+				offset += it.size;
+			}
+		}
+		if (feof(recordFile_))
+		{
+			fclose(recordFile_);
+			recordFile_ = nullptr;
+		}
+	}
+}
+
 void dn::SimNode::addChunk(const std::string& name, void* pData, size_t size, bool write)
 {
 	if(chunkSet_.count(name) > 0)
 		return;
 	chunkSet_.insert(name);
 	chunkList_.emplace_back(name,size,write,pData);
+}
+
+void dn::SimNode::setRecordDataFolder(const std::string& folder)
+{
+	if (running_)
+		return;
+	recordFolder_ = folder;
 }

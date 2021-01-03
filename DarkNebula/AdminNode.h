@@ -23,8 +23,6 @@ namespace dn
 		std::string ip;
 		// 仿真步数
 		uint32_t steps = 0;
-		// 仿真类型
-		bool replay = false;
 		// 初始化
 		bool init = false;
 		// 慢速节点，即不保证跟随每一步仿真
@@ -78,15 +76,14 @@ namespace dn
 		void setSimTime(double time);
 		// 设置仿真步长
 		void setStepTime(unsigned ms);
-		// 设置启用录制，启用时需要提供保存的文件名
-		void setRecord(bool enable, char const* name = nullptr);
+		// 设置启用录制，启用时需要提供保存的记录名，与回放互斥，取消时不会自动启用回放
+		void setRecord(bool enable, const std::string& name = "");
 		/**
-		 * \brief 设置启用回放
-		 * \param node 节点编号，-1为所有节点
+		 * \brief 设置启用回放，与录制互斥，取消时不会自动启用录制
 		 * \param enable 是否启用
-		 * \param name 启用时需要提供保存的文件名
+		 * \param name 启用时需要提供保存的记录名
 		 */
-		void setReply(int node, bool enable, char const* name = nullptr);
+		void setReplay(bool enable, const std::string& name = "");
 		// 设置仿真速度，实时为1
 		void setSimSpeed(double speed = 1);
 
@@ -144,6 +141,8 @@ namespace dn
 		// 节点信息
 		std::vector<NodeInfo> nodeList_;
 		std::map<std::string, int> nodeMap_;
+		// 节点统计
+		int slowNodeCount_, stepNodeCount_;
 		// 数据块信息
 		std::vector<ChunkInfo> chunkList_;
 		std::map<std::string, int> chunkMap_;

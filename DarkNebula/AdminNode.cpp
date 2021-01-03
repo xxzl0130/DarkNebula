@@ -12,7 +12,9 @@ dn::AdminNode::AdminNode(uint16_t receivePort, uint16_t sendPort):
 	receivePort_(receivePort),
 	sendPort_(sendPort),
 	curStepTime_(0.0),
-	simSpeed_(1.0)
+	simSpeed_(1.0),
+	slowNodeCount_(0),
+	stepNodeCount_(0)
 {
 	setBufferSize(1 * 1024 * 1024);
 	setReceivePort(receivePort);
@@ -133,18 +135,34 @@ void dn::AdminNode::setStepTime(unsigned ms)
 	stepTime_ = ms;
 }
 
-void dn::AdminNode::setRecord(bool enable, char const* name)
+void dn::AdminNode::setRecord(bool enable, const std::string& name)
 {
 	if (simState_ > SimStop)
 		return;
-	//TODO
+	if(enable)
+	{
+		replayState_ = Recording;
+		recordName_ = name;
+	}
+	else
+	{
+		replayState_ = ReplayNop;
+	}
 }
 
-void dn::AdminNode::setReply(int node, bool enable, char const* name)
+void dn::AdminNode::setReplay(bool enable, const std::string& name)
 {
 	if (simState_ > SimStop)
 		return;
-	//TODO
+	if (enable)
+	{
+		replayState_ = Replaying;
+		recordName_ = name;
+	}
+	else
+	{
+		replayState_ = ReplayNop;
+	}
 }
 
 void dn::AdminNode::setSimSpeed(double speed)
@@ -159,7 +177,10 @@ void dn::AdminNode::initSim()
 	if(simState_ != SimNop && simState_ != SimInit && simState_ != SimStop)
 		return;
 	simState_ = SimInit;
-	simReplay_ = true;
+	curTime_ = 0.0;
+	simSteps_ = 0;
+	slowNodeCount_ = 0;
+	stepNodeCount_ = 0;
 	// 把各种信息打到json里发布
 	json info;
 	json nodes;
@@ -170,8 +191,8 @@ void dn::AdminNode::initSim()
 		obj["name"] = nodeList_[i].name;
 		obj["id"] = i;
 		nodes[nodeList_[i].name] = obj;
-		// 所有节点都是重放状态才是重放
-		simReplay_ = simReplay_ && nodeList_[i].replay;
+		if (nodeList_[i].slow)
+			++slowNodeCount_;
 	}
 	for(auto i = 0ull;i < chunkList_.size();++i)
 	{
@@ -185,13 +206,11 @@ void dn::AdminNode::initSim()
 	info["chunks"] = chunks;
 	info["simTime"] = simTime_;
 	info["free"] = simFree_;
-	info["replay"] = simReplay_;
+	info["replay"] = replayState_;
 	info["step"] = stepTime_;
 	info["record"] = recordName_;
 	auto jsonStr = info.dump();
 	sendCommand(ALL_NODE, COMMAND_INIT,jsonStr.size(),jsonStr.c_str());
-	curTime_ = 0.0;
-	simSteps_ = 0;
 }
 
 void dn::AdminNode::startSim()
@@ -242,11 +261,12 @@ void dn::AdminNode::stepBackward()
 {
 	if (simState_ != SimPause && simState_ != SimStep)
 		return;
-	if (!simReplay_)	// 只有重放模式可以
+	if (replayState_ != Replaying)	// 只有重放模式可以
 		return;
 	if (simSteps_ <= 0)
 		return;
 	--simSteps_;
+	stepNodeCount_ = 0;
 	curTime_ = static_cast<double>(simSteps_) * stepTime_ / 1000.0;
 	sendCommand(ALL_NODE, COMMAND_STEP_BACKWARD, sizeof curTime_, &curTime_);
 	simState_ = SimStep;
@@ -336,8 +356,11 @@ void dn::AdminNode::sendCommand(int id, int code, size_t size, void const* data)
 void dn::AdminNode::stepAdvance()
 {
 	++simSteps_;
+	stepNodeCount_ = 0;
 	curTime_ = static_cast<double>(simSteps_) * stepTime_ / 1000.0;
 	sendCommand(ALL_NODE, COMMAND_STEP_FORWARD, sizeof curTime_, &curTime_);
+	if (!simFree_ && curTime_ >= simTime_)
+		stopSim();
 }
 
 bool dn::AdminNode::checkInit()
@@ -350,10 +373,7 @@ bool dn::AdminNode::checkInit()
 
 bool dn::AdminNode::checkStep()
 {
-	for (const auto& it : nodeList_)
-		if (it.steps != simSteps_ && !it.slow)
-			return false;
-	return true;
+	return stepNodeCount_ + slowNodeCount_ >= nodeList_.size();
 }
 
 void dn::AdminNode::nodeReg(char* buffer, int len)
@@ -438,12 +458,14 @@ void dn::AdminNode::nodeStep(char* buffer, int len)
 	{
 		step = *reinterpret_cast<int*>(inData());
 	}
-	if (header->ID < nodeList_.size())
+	if (header->ID >= 0 && header->ID < nodeList_.size() && nodeList_[header->ID].steps != step)
 	{
+		stepNodeCount_++;
 		nodeList_[header->ID].steps = step;
 		if (advanceCallback_)
 		{
 			advanceCallback_(header->ID);
+			// 所有节点都仿真了
 			if (checkStep())
 				advanceCallback_(ALL_NODE);
 		}

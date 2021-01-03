@@ -14,9 +14,9 @@ dn::Node::Node():
 	bufferSize_(0),
 	simTime_(10),
 	simFree_(false),
-	simReplay_(false),
 	stepTime_(10),
-	simState_(SimNop)
+	simState_(SimNop),
+	replayState_(ReplayNop)
 {
 	setBufferSize(1 * 1024 * 1024);
 }
@@ -84,7 +84,7 @@ bool dn::Node::isFreeSim() const
 
 bool dn::Node::isReplaySim() const
 {
-	return simReplay_;
+	return replayState_ == Replaying;
 }
 
 double dn::Node::getCurTime() const

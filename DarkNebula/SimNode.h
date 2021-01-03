@@ -1,7 +1,7 @@
 #pragma once
 #include "DarkNebulaGlobal.h"
-
 #include "Node.h"
+#include <cstdio>
 
 namespace dn
 {
@@ -9,6 +9,8 @@ namespace dn
 	typedef std::function<void(void)> SimEventCallback;
 	// 仿真推进回调函数
 	typedef std::function<void(uint32_t,double)> SimStepCallback;
+
+	struct Chunk;
 	
 	class DN_EXPORT SimNode : public Node
 	{
@@ -62,6 +64,8 @@ namespace dn
 		 * \param write 是否拥有该数据块写入权限
 		 */
 		void addChunk(const std::string& name, void* pData, size_t size, bool write);
+		// 设置记录回放数据保存文件夹
+		void setRecordDataFolder(const std::string& folder);
 
 		// 注册，之后无法修改参数
 		bool regIn();
@@ -82,33 +86,7 @@ namespace dn
 		// 回放推进函数，不设置时遇到回放将调用普通仿真函数
 		void setReplayStepCallback(SimStepCallback callback);
 
-	private:
-		// 数据块定义
-		struct Chunk
-		{
-			// 名称
-			std::string name;
-			// 容量
-			size_t size = 0;
-			// 所有权限
-			bool own = false;
-			// 初始化
-			bool init = false;
-			// 端口
-			uint16_t port = 0;
-			// 编号
-			int id = 0;
-			// socket指针
-			void* socket = nullptr;
-			// 数据指针
-			void* pData = nullptr;
-			// 缓存指针
-			std::unique_ptr<char[]> buffer = nullptr;
-			Chunk(){}
-			Chunk(const std::string& n, size_t s, bool write, void* p) :
-				name(n), size(s),own(write), init(false),port(0),id(-1),socket(nullptr),pData(p),buffer(new char[size]){}
-		};
-		
+	private:		
 		// 运行线程
 		void working() override;
 		// 发送注册消息
@@ -120,13 +98,17 @@ namespace dn
 		// 处理管理节点指令
 		void processAdminCommand();
 		// 处理初始化信息
-		void init();
+		bool init();
 		// 发送一个数据块
 		void sendChunk(Chunk& chunk);
 		// 发布自己所有要发布的数据块
 		void sendChunks();
 		// 将所有数据更新到用户数据里
 		void copyChunks();
+		// 加载下一帧数据
+		void loadNext();
+		// 加载前一帧数据
+		void loadBack();
 
 	private:
 		SimEventCallback initCallback_, startCallback_, pauseCallback_, stopCallback_;
@@ -163,6 +145,14 @@ namespace dn
 		std::thread* slowThread_;
 		// 慢速运行中
 		std::atomic_bool slowRunning_;
+		// 回放数据文件夹
+		std::string recordFolder_;
+		// 记录文件指针
+		FILE* recordFile_;
+		// 要记录的文件的大小
+		size_t recordSize_;
+		// 记录文件缓冲区，每次读一步的所有chunk的数据
+		std::unique_ptr<char[]> recordBuffer_;
 	};
 }
 

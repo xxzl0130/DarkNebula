@@ -42,10 +42,6 @@ namespace dn
 		COMMAND_STEP_IN,			// 单步模式
 		COMMAND_PAUSE,				// 暂停
 		COMMAND_STOP,				// 结束
-		COMMAND_RECORD,				// 记录数据
-		COMMAND_LOAD,				// 加载数据
-		COMMAND_SIM,				// 仿真模式
-		COMMAND_REPLAY,				// 重放模式
 	};
 
 	struct DN_EXPORT CommandHeader
@@ -65,4 +61,6 @@ namespace dn
 	constexpr uint16_t ADMIN_RECEIVE_PORT = 6666;
 	constexpr uint16_t ADMIN_SEND_PORT = 8888;
 	constexpr uint16_t CHUNK_PORT = 10000;
+	constexpr auto RECORD_FILE_SUFFIX = ".dnr";
+	constexpr uint32_t RECORD_FILE_MAGIC = 0x44417A9F;
 }
