@@ -103,12 +103,14 @@ namespace dn
 		void sendChunk(Chunk& chunk);
 		// 发布自己所有要发布的数据块
 		void sendChunks();
-		// 将所有数据更新到用户数据里
-		void copyChunks();
+		// 将所有own=false的数据更新到用户数据里
+		void copyNOwnChunks();
 		// 加载下一帧数据
 		void loadNext();
 		// 加载前一帧数据
 		void loadBack();
+		// 将所有own=true的数据更新到用户数据里
+		void copyOwnChunks();
 
 	private:
 		SimEventCallback initCallback_, startCallback_, pauseCallback_, stopCallback_;

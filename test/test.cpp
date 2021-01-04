@@ -30,8 +30,8 @@ int main()
 			const auto node = admin.getNodeList()[id];
 			cout << "Init :" << node.name << endl;
 		});
-	admin.setStepTime(10);
-	admin.setSimTime(10);
+	admin.setStepTime(1000);
+	admin.setSimTime(20);
 	
 	dn::SimNode node1("node1", "127.0.0.1", 20000, false, "127.0.0.1", 16666, 18888);
 	dn::SimNode node2("node2", "127.0.0.1", 30000, false, "127.0.0.1", 16666, 18888);
@@ -48,21 +48,25 @@ int main()
 		});
 	int counterRecv = 0;
 	node2.addChunk("counter", counterRecv, false);
+	node2.setSlowNode(true);
 	node2.regIn();
 	node2.setInitCallback([&]() {counterRecv = 0; });
 	node2.setSimStepCallback([&](unsigned step, double time)
 		{
 			cout << "Node 2: " << counterRecv << endl;
+			std::this_thread::sleep_for(std::chrono::milliseconds(1800));
 		});
 	
 	//system("pause");
 	Sleep(100);
+	//admin.setRecord(true, "test");
+	//admin.setReplay(true, "test");
 	admin.initSim();
 	Sleep(100);
 	//system("pause");
-	//admin.startSim();
+	admin.startSim();
 
-	Sleep(1000);
+	Sleep(100000);
 	
 	return 0;
 }

@@ -41,7 +41,8 @@ dn::SimNode::SimNode(const std::string& nodeName, const std::string& nodeIP, uin
 	slowRunning_(false),
 	recordFile_(nullptr),
 	recordSize_(0),
-	recordBuffer_(nullptr)
+	recordBuffer_(nullptr),
+	recordFolder_(".")
 {
 	setNodeName(nodeName);
 	setNodeIP(nodeIP);
@@ -310,7 +311,12 @@ void dn::SimNode::processAdminCommand()
 			startCallback_();
 		break;
 	case COMMAND_STEP_FORWARD:
-		copyChunks();
+		copyNOwnChunks();
+		if (replayState_ == Replaying)
+		{
+			loadNext();
+			copyOwnChunks();
+		}
 		simState_ = SimRun;
 		if (!slowNode_)
 		{
@@ -340,11 +346,19 @@ void dn::SimNode::processAdminCommand()
 				slowThread_->detach();
 			}
 		}
+		// 覆盖数据
+		if (replayState_ == Replaying)
+			copyOwnChunks();
 		sendChunks();
 		send2Admin(COMMAND_STEP_FORWARD, &simSteps_, sizeof simSteps_);
 		break;
 	case COMMAND_STEP_BACKWARD:
-		copyChunks();
+		copyNOwnChunks();
+		if (replayState_ == Replaying)
+		{
+			loadBack();
+			copyOwnChunks();
+		}
 		simState_ = SimRun;
 		if (!slowNode_)
 		{
@@ -373,6 +387,11 @@ void dn::SimNode::processAdminCommand()
 					});
 				slowThread_->detach();
 			}
+		}
+		// 覆盖数据
+		if (replayState_ == Replaying)
+		{
+			copyOwnChunks();
 		}
 		sendChunks();
 		send2Admin(COMMAND_STEP_BACKWARD, &simSteps_, sizeof simSteps_);
@@ -441,8 +460,9 @@ bool dn::SimNode::init()
 			return false;
 	}
 
-	recordBuffer_.reset(new char[recordSize_]);
-	auto filename = recordFolder_ + "/" + recordName_ + RECORD_FILE_SUFFIX;
+	if(recordSize_)
+		recordBuffer_.reset(new char[recordSize_]);
+	auto filename = recordFolder_ + "/" + recordName_ + "_" + nodeName_ + RECORD_FILE_SUFFIX;
 	if (recordFile_)
 		fclose(recordFile_);
 	if(replayState_ == Replaying)
@@ -464,7 +484,7 @@ bool dn::SimNode::init()
 			return false;
 		}
 	}
-	else if(replayState_ == Recording)
+	else if(replayState_ == Recording && recordSize_)
 	{
 		if(fopen_s(&recordFile_, filename.c_str(), "wb") == 0) // 写入magic
 		{
@@ -502,7 +522,7 @@ void dn::SimNode::sendChunks()
 			sendChunk(it);
 }
 
-void dn::SimNode::copyChunks()
+void dn::SimNode::copyNOwnChunks()
 {
 	for (auto& it : chunkList_)
 		if (!it.own)
@@ -519,7 +539,7 @@ void dn::SimNode::loadNext()
 		{
 			if (it.own)
 			{
-				memcpy_s(it.pData, it.size, recordBuffer_.get() + offset, it.size);
+				memcpy_s(it.buffer.get(), it.size, recordBuffer_.get() + offset, it.size);
 				offset += it.size;
 			}
 		}
@@ -527,6 +547,7 @@ void dn::SimNode::loadNext()
 		{
 			fclose(recordFile_);
 			recordFile_ = nullptr;
+			replayState_ = ReplayNop;
 		}
 	}
 }
@@ -544,7 +565,7 @@ void dn::SimNode::loadBack()
 		{
 			if (it.own)
 			{
-				memcpy_s(it.pData, it.size, recordBuffer_.get() + offset, it.size);
+				memcpy_s(it.buffer.get(), it.size, recordBuffer_.get() + offset, it.size);
 				offset += it.size;
 			}
 		}
@@ -552,8 +573,16 @@ void dn::SimNode::loadBack()
 		{
 			fclose(recordFile_);
 			recordFile_ = nullptr;
+			replayState_ = ReplayNop;
 		}
 	}
+}
+
+void dn::SimNode::copyOwnChunks()
+{
+	for (auto& it : chunkList_)
+		if (it.own)
+			memcpy_s(it.pData, it.size, it.buffer.get(), it.size);
 }
 
 void dn::SimNode::addChunk(const std::string& name, void* pData, size_t size, bool write)

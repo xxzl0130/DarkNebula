@@ -11,10 +11,10 @@ using nlohmann::json;
 dn::AdminNode::AdminNode(uint16_t receivePort, uint16_t sendPort):
 	receivePort_(receivePort),
 	sendPort_(sendPort),
-	curStepTime_(0.0),
-	simSpeed_(1.0),
 	slowNodeCount_(0),
-	stepNodeCount_(0)
+	stepNodeCount_(0),
+	curStepTime_(0.0),
+	simSpeed_(1.0)
 {
 	setBufferSize(1 * 1024 * 1024);
 	setReceivePort(receivePort);
@@ -223,6 +223,7 @@ void dn::AdminNode::startSim()
 		simSteps_ = 0;
 		curTime_ = 0.0;
 		curStepTime_ = 0.0;
+		stepNodeCount_ = nodeList_.size() - slowNodeCount_;
 		sendCommand(ALL_NODE, COMMAND_START,sizeof curTime_, &curTime_);
 		simState_ = SimRun;
 		if(stepTime_ > 1)
@@ -247,6 +248,7 @@ void dn::AdminNode::stopSim()
 	}
 	sendCommand(ALL_NODE, COMMAND_STOP, sizeof curTime_, &curTime_);
 	simState_ = SimStop;
+	timer_.stop();
 }
 
 void dn::AdminNode::stepForward()
