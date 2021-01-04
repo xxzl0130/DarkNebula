@@ -437,6 +437,8 @@ bool dn::SimNode::init()
 			zmq_pollitem_t item{ chunk.socket, 0, ZMQ_POLLIN };
 			pollitems_.emplace_back(item);
 		}
+		else
+			return false;
 	}
 
 	recordBuffer_.reset(new char[recordSize_]);
