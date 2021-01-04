@@ -10,27 +10,10 @@ namespace dn
 	public:
 		Node();
 		virtual ~Node();
-		
-		enum SimState
-		{
-			SimNop = 0,
-			SimInit,		// 初始化
-			SimStop,		// 停止中
-			SimRun = 0x10,	// 运行中
-			SimPause,		// 暂停中
-			SimStep,		// 单步模式
-		};
-
-		enum ReplayState
-		{
-			ReplayNop = 0,
-			Recording = 0x10,		// 记录数据
-			Replaying = 0x20,		// 重放数据
-		};
 
 		// 设置缓冲区大小，默认1MB
 		virtual void setBufferSize(size_t bytes);
-		size_t getBufferSize();
+		size_t getBufferSize() const;
 
 		// 获取当前仿真步数
 		uint32_t getSimStep() const;

@@ -44,6 +44,23 @@ namespace dn
 		COMMAND_STOP,				// 结束
 	};
 
+	enum SimState
+	{
+		SimNop = 0,
+		SimInit,		// 初始化
+		SimStop,		// 停止中
+		SimRun = 0x10,	// 运行中
+		SimPause,		// 暂停中
+		SimStep,		// 单步模式
+	};
+
+	enum ReplayState
+	{
+		ReplayNop = 0,
+		Recording = 0x10,		// 记录数据
+		Replaying = 0x20,		// 重放数据
+	};
+
 	struct DN_EXPORT CommandHeader
 	{
 		// 节点ID，-1为全部

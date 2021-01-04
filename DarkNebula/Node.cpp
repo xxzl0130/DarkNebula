@@ -57,7 +57,7 @@ void dn::Node::setBufferSize(size_t bytes)
 	outBuffer_ = new char[bytes];
 }
 
-size_t dn::Node::getBufferSize()
+size_t dn::Node::getBufferSize() const
 {
 	return bufferSize_;
 }
@@ -72,7 +72,7 @@ double dn::Node::getSimTime() const
 	return curTime_;
 }
 
-dn::Node::SimState dn::Node::getSimState() const
+dn::SimState dn::Node::getSimState() const
 {
 	return simState_;
 }
