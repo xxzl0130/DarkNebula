@@ -54,4 +54,8 @@ namespace DarkNebulaSharp
         public const string RECORD_FILE_SUFFIX = ".dnr";
         public const UInt32 RECORD_FILE_MAGIC = 0x44417A9F;
     }
+
+    public delegate void SimEventDelegate();
+
+    public delegate void SimStepDelegate(uint step, double time);
 }

@@ -1,12 +1,10 @@
 ﻿using System;
 using System.Threading;
-using NetMQ;
 using NetMQ.Sockets;
-using NetMQ.Core;
 
 namespace DarkNebulaSharp
 {
-    abstract class Node
+    public abstract class Node
     {
         protected Node()
         {
@@ -27,6 +25,7 @@ namespace DarkNebulaSharp
 
         ~Node()
         {
+            StopWorking();
         }
 
         // 发布指令的socket
