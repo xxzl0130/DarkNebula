@@ -14,6 +14,7 @@ namespace SharpTest
     {
         public static void Publisher()
         {
+            Console.WriteLine(Thread.CurrentThread.ManagedThreadId.ToString());
             using (var publisher = new PublisherSocket())
             {
                 publisher.Bind("tcp://*:5556");
@@ -34,19 +35,31 @@ namespace SharpTest
 
         public static void Subscriber()
         {
+            Console.WriteLine(Thread.CurrentThread.ManagedThreadId.ToString());
             using (var subscriber = new SubscriberSocket())
             {
                 subscriber.Connect("tcp://127.0.0.1:5556");
                 subscriber.Subscribe("A");
-
-                while (true)
-                {
-                    var topic = subscriber.ReceiveFrameString();
-                    var msg = subscriber.ReceiveFrameBytes();
-                    var i = ByteToStructure<int>(msg);
-                    Console.WriteLine("From Publisher: {0} {1}", topic, i);
-                }
+                var poller = new NetMQPoller {subscriber};
+                subscriber.ReceiveReady += Subscriber_ReceiveReady;
+                poller.Run();
+                //while (true)
+                //{
+                //    var topic = subscriber.ReceiveFrameString();
+                //    var msg = subscriber.ReceiveFrameBytes();
+                //    var i = ByteToStructure<int>(msg);
+                //    Console.WriteLine("From Publisher: {0} {1}", topic, i);
+                //}
             }
+        }
+
+        private static void Subscriber_ReceiveReady(object sender, NetMQSocketEventArgs e)
+        {
+            Console.WriteLine(Thread.CurrentThread.ManagedThreadId.ToString());
+            var topic = e.Socket.ReceiveFrameString();
+            var msg = e.Socket.ReceiveFrameBytes();
+            var i = ByteToStructure<int>(msg);
+            Console.WriteLine("From Publisher: {0} {1}", topic, i);
         }
 
         static void Main(string[] args)

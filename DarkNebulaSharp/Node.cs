@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Threading;
+using NetMQ;
 using NetMQ.Sockets;
 
 namespace DarkNebulaSharp
@@ -21,6 +22,7 @@ namespace DarkNebulaSharp
             ReplayState = (int) ReplayStates.ReplayNop;
             RecordName = "";
             WorkMutex = new Mutex(false);
+            Poller = new NetMQPoller();
         }
 
         ~Node()
@@ -56,6 +58,8 @@ namespace DarkNebulaSharp
         protected int ReplayState;
         // 记录名称
         public string RecordName { get; set; }
+        // poller
+        protected NetMQPoller Poller;
 
         // 开始工作线程
         protected void StartWorking()
@@ -66,26 +70,21 @@ namespace DarkNebulaSharp
                 WorkThread = null;
             }
 
-            WorkThread = new Thread((() =>
-            {
-                WorkMutex.WaitOne();
-                while (!WorkStop)
-                {
-                    Working();
-                }
-                WorkMutex.ReleaseMutex();
-            })) {IsBackground = true};
+            WorkThread = new Thread(Working) {IsBackground = true};
             WorkThread.Start();
         }
         // 停止工作线程
         protected void StopWorking()
         {
             WorkStop = true;
+            Poller.Stop();
             WorkMutex.WaitOne();
             WorkStop = false;
             WorkThread = null;
         }
         // 工作线程
         protected abstract void Working();
+        // socket事件响应
+        protected abstract void SocketReady(object sender, NetMQSocketEventArgs e);
     }
 }
