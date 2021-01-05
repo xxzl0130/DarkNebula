@@ -1,8 +1,12 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Linq;
+using System.Runtime.InteropServices;
 using System.Threading;
 using NetMQ;
 using NetMQ.Sockets;
+using Newtonsoft.Json;
+using Newtonsoft.Json.Linq;
 
 namespace DarkNebulaSharp
 {
@@ -10,6 +14,7 @@ namespace DarkNebulaSharp
     {
         public SimNode()
         {
+            ChunkDict = new Dictionary<string, Chunk>();
         }
 
         ~SimNode()
@@ -213,32 +218,64 @@ namespace DarkNebulaSharp
         // 注册，完成后无法修改以上参数
         public bool RegIn()
         {
-            throw new System.NotImplementedException();
+            if (running)
+                return true;
+            InitSocket();
+            if (!SendReg())
+                return false;
+            StartWorking();
+            running = true;
+
             return true;
         }
 
         private bool running = false;
         protected override void Working()
         {
-            throw new System.NotImplementedException();
+            WorkMutex.WaitOne();
+
+            Poller?.Dispose();
+            Poller = new NetMQPoller {SubSocket};
+            Poller.Run();
         }
 
         protected override void SocketReady(object sender, NetMQSocketEventArgs e)
         {
-            throw new System.NotImplementedException();
+            var topic = e.Socket.ReceiveFrameString();
+            if (topic == DNVars.COMMAND_TOPIC) // 管理节点消息
+            {
+                ProcessAdminCommand();
+                return;
+            }
+            // 数据节点消息
         }
 
         // 发送注册消息
         private bool SendReg()
         {
-            throw new System.NotImplementedException();
+            var info = new JObject {["name"] = nodeName, ["ip"] = nodeIP, ["slow"] = slowNode};
+            var chunks = new JArray();
+            var port = chunkPort;
+            foreach (var it in ChunkDict)
+            {
+                var chunk = new JObject {["name"] = it.Value.Name, ["own"] = it.Value.Own};
+                if (it.Value.Own)
+                    it.Value.Port = port++;
+                chunk["port"] = it.Value.Port;
+                chunks.Add(chunk);
+            }
+
+            info["chunks"] = chunks;
+            Send2Admin(CommandCode.COMMAND_REG, info.ToString());
+
+            return true;
         }
 
         // 初始化
-        void InitSocket()
+        private void InitSocket()
         {
-            PubSocket.Dispose();
-            SubSocket.Dispose();
+            PubSocket?.Dispose();
+            SubSocket?.Dispose();
 
             PubSocket = new PublisherSocket();
             PubSocket.Connect("tcp://" + adminIP + ":" + adminRecvPort.ToString());
@@ -246,49 +283,110 @@ namespace DarkNebulaSharp
             SubSocket = new SubscriberSocket();
             SubSocket.Connect("tcp://" + adminIP + ":" + adminSendPort.ToString());
             SubSocket.Subscribe(DNVars.COMMAND_TOPIC);
+            SubSocket.ReceiveReady += SocketReady;
 
             // 等待连接
             Thread.Sleep(50);
         }
 
         // 向管理节点发送指令
-        void Send2Admin(int code)
+        private void Send2Admin(CommandCode code, string msg)
         {
-            throw new System.NotImplementedException();
+            var bytes = System.Text.Encoding.UTF8.GetBytes(msg);
+            Send2Admin(code, bytes);
+        }
+
+        // 向管理节点发送指令
+        private void Send2Admin<T>(CommandCode code, T obj)
+        {
+            var bytes = Utils.StructureToByte(obj);
+            Send2Admin(code, bytes);
+        }
+
+        // 向管理节点发送指令
+        private void Send2Admin(CommandCode code, byte[] data)
+        {
+            var header = new CommandHeader {ID = ID, size = data.Length, code = code};
+            var headerData = Utils.StructureToByte(header);
+            var length = headerData.Length + data.Length;
+            if (length > OutBuffer.Length) // Buffer翻倍
+            {
+                OutBuffer = new byte[length * 2];
+            }
+            headerData.CopyTo(OutBuffer, 0);
+            data.CopyTo(OutBuffer, headerData.Length);
+            PubSocket.SendMoreFrame(DNVars.REPLY_TOPIC).SendFrame(OutBuffer, length);
         }
 
         // 处理管理节点指令
-        void ProcessAdminCommand()
+        private void ProcessAdminCommand()
         {
-            throw new System.NotImplementedException();
+            InBuffer = SubSocket.ReceiveFrameBytes();
+            var header = Utils.ByteToStructure<CommandHeader>(InBuffer);
+            if (header.ID != DNVars.ALL_NODE && header.ID != ID)
+                return;
+            switch (header.code)
+            {
+                case CommandCode.COMMAND_INIT:
+                    var ok = Init();
+                    if (!ok)
+                    {
+                        Send2Admin(CommandCode.COMMAND_INIT, ok);
+                        break;
+                    }
+
+                    simState = SimStates.SimInit;
+                    initCallback?.Invoke();
+                    Send2Admin(CommandCode.COMMAND_INIT, ok);
+
+                    break;
+                case CommandCode.COMMAND_START:
+                    break;
+                case CommandCode.COMMAND_STEP_FORWARD:
+                    break;
+                case CommandCode.COMMAND_STEP_BACKWARD:
+                    break;
+                case CommandCode.COMMAND_PAUSE:
+                    break;
+                case CommandCode.COMMAND_STOP:
+                    break;
+                default:
+                    break;
+            }
         }
 
         // 处理初始化信息
-        bool Init()
+        private bool Init()
         {
-            throw new System.NotImplementedException();
+            var str = System.Text.Encoding.UTF8.GetString(InBuffer.Skip(Marshal.SizeOf<CommandHeader>()).ToArray());
+            var obj = (JObject)JsonConvert.DeserializeObject(str);
+
+            Console.WriteLine(obj.ToString());
+            Console.WriteLine(obj["free"]);
+
+            return true;
         }
 
         // 发送一个数据块
-        void SendChunk(ref Chunk chunk)
+        private void SendChunk(ref Chunk chunk)
         {
             throw new System.NotImplementedException();
         }
 
         // 发布自己所有要发布的数据块
-        void SendChunks()
+        private void SendChunks()
         {
             throw new System.NotImplementedException();
         }
 
         // 加载下一帧数据
-        void LoadNext()
+        private void LoadNext()
         {
             throw new System.NotImplementedException();
         }
 
         // 加载前一帧数据
-        void LoadBack()
+        private void LoadBack()
         {
             throw new System.NotImplementedException();
         }

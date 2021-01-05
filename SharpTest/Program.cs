@@ -7,69 +7,22 @@ using System.Threading;
 using System.Threading.Tasks;
 using NetMQ;
 using NetMQ.Sockets;
+using DarkNebulaSharp;
 
 namespace SharpTest
 {
     class Program
     {
-        public static void Publisher()
-        {
-            Console.WriteLine(Thread.CurrentThread.ManagedThreadId.ToString());
-            using (var publisher = new PublisherSocket())
-            {
-                publisher.Bind("tcp://*:5556");
-
-                int i = 0;
-
-                while (true)
-                {
-                    publisher
-                        .SendMoreFrame("A") // Topic
-                        .SendFrame(StructureToByte(i), Marshal.SizeOf(i)); // Message
-
-                    i++;
-                    Thread.Sleep(1000);
-                }
-            }
-        }
-
-        public static void Subscriber()
-        {
-            Console.WriteLine(Thread.CurrentThread.ManagedThreadId.ToString());
-            using (var subscriber = new SubscriberSocket())
-            {
-                subscriber.Connect("tcp://127.0.0.1:5556");
-                subscriber.Subscribe("A");
-                var poller = new NetMQPoller {subscriber};
-                subscriber.ReceiveReady += Subscriber_ReceiveReady;
-                poller.Run();
-                //while (true)
-                //{
-                //    var topic = subscriber.ReceiveFrameString();
-                //    var msg = subscriber.ReceiveFrameBytes();
-                //    var i = ByteToStructure<int>(msg);
-                //    Console.WriteLine("From Publisher: {0} {1}", topic, i);
-                //}
-            }
-        }
-
-        private static void Subscriber_ReceiveReady(object sender, NetMQSocketEventArgs e)
-        {
-            Console.WriteLine(Thread.CurrentThread.ManagedThreadId.ToString());
-            var topic = e.Socket.ReceiveFrameString();
-            var msg = e.Socket.ReceiveFrameBytes();
-            var i = ByteToStructure<int>(msg);
-            Console.WriteLine("From Publisher: {0} {1}", topic, i);
-        }
 
         static void Main(string[] args)
         {
-            var subThread = new Thread(Subscriber);
-            var pubThread = new Thread(Publisher);
-            subThread.IsBackground = true;
-            pubThread.IsBackground = true;
-            subThread.Start();
-            pubThread.Start();
+            var node = new DarkNebulaSharp.SimNode
+            {
+                ChunkPort = 20000, NodeName = "sharp", AdminRecvPort = 16666, AdminSendPort = 18888
+            };
+            node.AddChunk("counter", sizeof(int), false);
+            Console.ReadKey();
+            node.RegIn();
 
             Console.ReadKey();
         }

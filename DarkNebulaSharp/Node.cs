@@ -13,16 +13,18 @@ namespace DarkNebulaSharp
             SubSocket = null;
             WorkThread = null;
             WorkStop = false;
-            SimSteps = 0;
-            CurTime = 0;
+            simSteps = 0;
+            curTime = 0;
             SimTime = 10;
             SimFree = false;
             StepTime = 10;
-            SimState = SimStates.SimNop;
+            simState = SimStates.SimNop;
             ReplayState = (int) ReplayStates.ReplayNop;
             RecordName = "";
             WorkMutex = new Mutex(false);
             Poller = new NetMQPoller();
+            OutBuffer = new byte[1*1024*1024];
+            InBuffer = null;
         }
 
         ~Node()
@@ -40,20 +42,25 @@ namespace DarkNebulaSharp
         protected bool WorkStop;
         // 监听锁
         protected Mutex WorkMutex;
-        
-        // 仿真步数
-        public UInt32 SimSteps { get; }
 
+        protected UInt32 simSteps;
+        // 仿真步数
+        public UInt32 SimSteps { get => simSteps; }
+
+        private double curTime;
         // 当前仿真时间
-        public double CurTime { get; }
+        public double CurTime { get => curTime; }
+
         // 最长仿真时间
         public double SimTime { get; set; }
         // 自由仿真类型
         public bool SimFree { get; set; }
         // 仿真步长,ms
         public UInt32 StepTime { get; set; }
+
+        protected SimStates simState;
         // 仿真状态
-        public SimStates SimState { get; }
+        public SimStates SimState { get => simState; }
         // 回放状态
         protected int ReplayState;
         // 记录名称
@@ -86,5 +93,10 @@ namespace DarkNebulaSharp
         protected abstract void Working();
         // socket事件响应
         protected abstract void SocketReady(object sender, NetMQSocketEventArgs e);
+
+        // 输出缓冲
+        protected byte[] OutBuffer;
+        // 输入缓冲
+        protected byte[] InBuffer;
     }
 }

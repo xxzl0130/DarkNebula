@@ -57,8 +57,8 @@ int main()
 			std::this_thread::sleep_for(std::chrono::milliseconds(1800));
 		});
 	
-	//system("pause");
-	Sleep(100);
+	system("pause");
+	//Sleep(100);
 	//admin.setRecord(true, "test");
 	//admin.setReplay(true, "test");
 	admin.initSim();

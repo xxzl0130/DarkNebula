@@ -1,4 +1,5 @@
 ﻿using System;
+using System.Runtime.InteropServices;
 
 namespace DarkNebulaSharp
 {
@@ -20,7 +21,7 @@ namespace DarkNebulaSharp
     }
 
     // 指令
-    public enum CommandCode
+    public enum CommandCode : Int32
     {
         COMMAND_NOP = 0,
         COMMAND_INIT,               // 初始化
@@ -33,12 +34,13 @@ namespace DarkNebulaSharp
         COMMAND_STOP,               // 结束
     };
 
+    [StructLayout(LayoutKind.Sequential)]
     public struct CommandHeader
     {
         // 节点ID，-1为全部
         public Int32 ID;
-        public Int32 code;
-        public UInt32 size;
+        public CommandCode code;
+        public Int32 size;
     }
 
     public static class DNVars
@@ -58,4 +60,43 @@ namespace DarkNebulaSharp
     public delegate void SimEventDelegate();
 
     public delegate void SimStepDelegate(uint step, double time);
+
+    public class Utils
+    {
+        public static byte[] StructureToByte<T>(T structure)
+        {
+            int size = Marshal.SizeOf(typeof(T));
+            byte[] buffer = new byte[size];
+            IntPtr bufferIntPtr = Marshal.AllocHGlobal(size);
+            try
+            {
+                Marshal.StructureToPtr(structure, bufferIntPtr, true);
+                Marshal.Copy(bufferIntPtr, buffer, 0, size);
+            }
+            finally
+            {
+                Marshal.FreeHGlobal(bufferIntPtr);
+            }
+
+            return buffer;
+        }
+
+        public static T ByteToStructure<T>(byte[] dataBuffer)
+        {
+            object obj = null;
+            int size = Marshal.SizeOf(typeof(T));
+            IntPtr allocIntPtr = Marshal.AllocHGlobal(size);
+            try
+            {
+                Marshal.Copy(dataBuffer, 0, allocIntPtr, size);
+                obj = Marshal.PtrToStructure(allocIntPtr, typeof(T));
+            }
+            finally
+            {
+                Marshal.FreeHGlobal(allocIntPtr);
+            }
+
+            return (T) obj;
+        }
+    }
 }
