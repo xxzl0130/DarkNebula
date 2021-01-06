@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Runtime.InteropServices;
 using System.Threading;
+using System.IO;
 using NetMQ;
 using NetMQ.Sockets;
 using Newtonsoft.Json;
@@ -215,6 +216,43 @@ namespace DarkNebulaSharp
             ChunkDict[name] = new Chunk(name,size,own);
         }
 
+        /// <summary>
+        /// 更新Chunk的数据，要求对Chunk有写入权限
+        /// </summary>
+        /// <typeparam name="T">类型通配</typeparam>
+        /// <param name="name">名称</param>
+        /// <param name="data">数据</param>
+        public void UpdateChunkData<T>(string name, T data)
+        {
+            if (ChunkDict.ContainsKey(name))
+            {
+                var chunk = ChunkDict[name];
+                if (chunk.Own)
+                {
+                    chunk.Buffer.Put(Utils.StructureToByte(data),0,Marshal.SizeOf(data));
+                }
+            }
+        }
+
+        /// <summary>
+        /// 获取Chunk数据
+        /// </summary>
+        /// <typeparam name="T">类型通配</typeparam>
+        /// <param name="name">名称</param>
+        /// <param name="data">数据</param>
+        public void GetChunkData<T>(string name, out T data)
+        {
+            if (ChunkDict.ContainsKey(name))
+            {
+                var chunk = ChunkDict[name];
+                data = Utils.ByteToStructure<T>(chunk.Buffer.ToArray());
+            }
+            else
+            {
+                data = default(T);
+            }
+        }
+
         // 注册，完成后无法修改以上参数
         public bool RegIn()
         {
@@ -359,24 +397,98 @@ namespace DarkNebulaSharp
         private bool Init()
         {
             var str = System.Text.Encoding.UTF8.GetString(InBuffer.Skip(Marshal.SizeOf<CommandHeader>()).ToArray());
-            var obj = (JObject)JsonConvert.DeserializeObject(str);
+            var info = (JObject)JsonConvert.DeserializeObject(str);
+            if (info == null)
+                return false;
 
-            Console.WriteLine(obj.ToString());
-            Console.WriteLine(obj["free"]);
+            SimTime = info["simTime"].Value<double>();
+            SimFree = info["free"].Value<bool>();
+            ReplayState = info["replay"].Value<int>();
+            StepTime = info["step"].Value<uint>();
+            RecordName = info["record"].Value<string>();
 
+            var nodes = info["nodes"].Value<JObject>();
+            if (nodes.ContainsKey(nodeName))
+            {
+                ID = nodes[nodeName]["id"].Value<int>();
+            }
+
+            var chunks = info["chunks"].Value<JObject>();
+            foreach (var it in ChunkDict)
+            {
+                if (chunks.ContainsKey(it.Key))
+                {
+                    var obj = chunks[it.Key];
+                    it.Value.ID = obj["id"].Value<int>();
+                    it.Value.Socket?.Dispose();
+                    if (it.Value.Own) // Pub
+                    {
+                        it.Value.Socket = new PublisherSocket();
+                        it.Value.Socket.Bind("tcp://*:" + it.Value.Port.ToString());
+                    }
+                    else
+                    {
+                        it.Value.Socket = new SubscriberSocket();
+                        it.Value.Socket.Connect(obj["path"].Value<string>());
+                        Poller.Add(it.Value.Socket);
+                    }
+                }
+                else
+                {
+                    return false;
+                }
+            }
+
+            // 记录文件
+            try
+            {
+                recordFileStream?.Dispose();
+                var filename = recordFolder + "/" + RecordName + "_" + nodeName + DNVars.RECORD_FILE_SUFFIX;
+                if (ReplayState == (int) ReplayStates.Replaying)
+                {
+                    recordFileStream = new FileStream(filename,FileMode.Open);
+                    var buffer = new byte[sizeof(uint)];
+                    recordFileStream.Read(buffer, 0, 4);
+                    if (Utils.ByteToStructure<uint>(buffer) != DNVars.RECORD_FILE_MAGIC)
+                    {
+                        recordFileStream.Close();
+                        recordFileStream.Dispose();
+                    }
+                }
+                else if (ReplayState == (int) ReplayStates.Recording)
+                {
+                    recordFileStream = new FileStream(filename, FileMode.Create);
+                    recordFileStream.Write(Utils.StructureToByte(DNVars.RECORD_FILE_MAGIC), 0, sizeof(uint));
+                    recordFileStream.FlushAsync();
+                }
+            }
+            catch (IOException)
+            {
+                ReplayState = (int)ReplayStates.ReplayNop;
+                return false;
+            }
+
+            // 等待连接
+            Thread.Sleep(50);
             return true;
         }
 
         // 发送一个数据块
-        private void SendChunk(ref Chunk chunk)
+        private void SendChunk(Chunk chunk)
         {
-            throw new System.NotImplementedException();
+            chunk.Socket.SendMoreFrame(chunk.Name).Send(ref chunk.Buffer,false);
         }
 
         // 发布自己所有要发布的数据块
         private void SendChunks()
         {
-            throw new System.NotImplementedException();
+            foreach (var it in ChunkDict)
+            {
+                if (it.Value.Own)
+                {
+                    SendChunk(it.Value);
+                }
+            }
         }
 
         // 加载下一帧数据
@@ -395,5 +507,7 @@ namespace DarkNebulaSharp
         private Dictionary<string, Chunk> ChunkDict;
         // 本节点ID
         private int ID = -1;
+
+        private FileStream recordFileStream;
     }
 }

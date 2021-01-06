@@ -13,7 +13,7 @@ namespace DarkNebulaSharp
         SimStep,        // 单步模式
 	}
 
-    public enum ReplayStates
+    public enum ReplayStates : Int32
     {
         ReplayNop = 0,
         Recording = 0x10,       // 记录数据
