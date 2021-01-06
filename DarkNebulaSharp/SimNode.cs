@@ -221,14 +221,14 @@ namespace DarkNebulaSharp
         /// <typeparam name="T">类型通配</typeparam>
         /// <param name="name">名称</param>
         /// <param name="data">数据</param>
-        public void UpdateChunkData<T>(string name, T data)
+        public void SetChunkData<T>(string name, T data)
         {
             if (ChunkDict.ContainsKey(name))
             {
                 var chunk = ChunkDict[name];
                 if (chunk.Own)
                 {
-                    chunk.Buffer.Put(Utils.StructureToByte(data),0,Marshal.SizeOf(data));
+                    chunk.Buffer = Utils.StructureToByte(data);
                 }
             }
         }
@@ -290,7 +290,7 @@ namespace DarkNebulaSharp
             if (ChunkDict.ContainsKey(topic))
             {
                 var chunk = ChunkDict[topic];
-                e.Socket.Receive(ref chunk.Buffer);
+                chunk.Buffer = e.Socket.ReceiveFrameBytes();
             }
         }
 
@@ -428,6 +428,7 @@ namespace DarkNebulaSharp
                             slowRunning = false;
                             slowMutex.ReleaseMutex();
                         });
+                        slowThread.Start();
                     }
 
                     SendChunks();
@@ -521,12 +522,14 @@ namespace DarkNebulaSharp
                     {
                         it.Value.Socket = new PublisherSocket();
                         it.Value.Socket.Bind("tcp://*:" + it.Value.Port.ToString());
-                        recordSize += it.Value.Buffer.Size;
+                        recordSize += it.Value.Buffer.Length;
                     }
                     else
                     {
                         it.Value.Socket = new SubscriberSocket();
                         it.Value.Socket.Connect(obj["path"].Value<string>());
+                        ((SubscriberSocket)it.Value.Socket).Subscribe(System.Text.Encoding.UTF8.GetBytes(it.Value.Name));
+                        it.Value.Socket.ReceiveReady += SocketReady;
                         Poller.Add(it.Value.Socket);
                     }
                 }
@@ -580,7 +583,7 @@ namespace DarkNebulaSharp
         // 发送一个数据块
         private void SendChunk(Chunk chunk)
         {
-            chunk.Socket.SendMoreFrame(chunk.Name).Send(ref chunk.Buffer,false);
+            chunk.Socket.SendMoreFrame(chunk.Name).SendFrame(chunk.Buffer);
         }
 
         // 发布自己所有要发布的数据块
@@ -612,8 +615,8 @@ namespace DarkNebulaSharp
                 var offset = 0;
                 foreach (var it in ChunkDict.Where(it => it.Value.Own))
                 {
-                    it.Value.Buffer.Put(recordBuffer.Skip(offset).ToArray(), 0, it.Value.Buffer.Size);
-                    offset += it.Value.Buffer.Size;
+                    it.Value.Buffer = recordBuffer.Skip(offset).ToArray();
+                    offset += it.Value.Buffer.Length;
                 }
             }
             catch (IOException)

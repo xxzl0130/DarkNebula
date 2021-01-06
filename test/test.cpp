@@ -25,6 +25,7 @@ int main()
 			if (id == dn::ALL_NODE)
 			{
 				cout << "All init!" << endl;
+				admin.startSim();
 				return;
 			}
 			const auto node = admin.getNodeList()[id];
@@ -64,7 +65,6 @@ int main()
 	admin.initSim();
 	Sleep(100);
 	//system("pause");
-	admin.startSim();
 
 	Sleep(100000);
 	

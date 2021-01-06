@@ -84,7 +84,7 @@ namespace DarkNebulaSharp
         protected void StopWorking()
         {
             WorkStop = true;
-            Poller.Stop();
+            Poller?.Dispose();
             WorkMutex.WaitOne();
             WorkStop = false;
             WorkThread = null;

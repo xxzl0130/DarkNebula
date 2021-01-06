@@ -4,8 +4,8 @@ namespace DarkNebulaSharp
 {
     internal class Chunk
     {
-        // utf-8保存的名称
-        public byte[] Name;
+        // 名称
+        public string Name;
         // 所有权限
         public bool Own = false;
         // 端口
@@ -13,7 +13,7 @@ namespace DarkNebulaSharp
         // 编号
         public int ID = 0;
         // 缓冲区
-        public NetMQ.Msg Buffer;
+        public byte[] Buffer;
         // socket
         public NetMQ.NetMQSocket Socket = null;
 
@@ -23,10 +23,9 @@ namespace DarkNebulaSharp
 
         public Chunk(string name, int size, bool own)
         {
-            Name = System.Text.Encoding.UTF8.GetBytes(name);
+            Name = name;
             Own = own;
-            Buffer = new NetMQ.Msg();
-            Buffer.InitPool(size);
+            Buffer = new byte[size];
         }
     }
 }

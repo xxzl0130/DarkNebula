@@ -13,14 +13,22 @@ namespace SharpTest
 {
     class Program
     {
-
+        private static int counter = 0;
         static void Main(string[] args)
         {
             var node = new DarkNebulaSharp.SimNode
             {
-                ChunkPort = 20000, NodeName = "sharp", AdminRecvPort = 16666, AdminSendPort = 18888
+                ChunkPort = 20000, NodeName = "sharp", AdminRecvPort = 16666, AdminSendPort = 18888, 
+                SlowNode = true
             };
             node.AddChunk("counter", sizeof(int), false);
+            node.SimStepCallback = (step, time) =>
+            {
+                node.GetChunkData("counter",out counter);
+                //node.SetChunkData("counter", counter);
+                Console.WriteLine(counter);
+                Thread.Sleep(1500);
+            };
             Console.ReadKey();
             node.RegIn();
 
