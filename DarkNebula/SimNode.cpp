@@ -559,22 +559,7 @@ void dn::SimNode::loadBack()
 	{
 		// ÏòÇ°Æ«ÒÆÁ½±¶
 		fseek(recordFile_, -static_cast<long>(recordSize_ * 2), SEEK_CUR);
-		fread_s(recordBuffer_.get(), recordSize_, 1, recordSize_, recordFile_);
-		size_t offset = 0;
-		for (auto& it : chunkList_)
-		{
-			if (it.own)
-			{
-				memcpy_s(it.buffer.get(), it.size, recordBuffer_.get() + offset, it.size);
-				offset += it.size;
-			}
-		}
-		if (feof(recordFile_))
-		{
-			fclose(recordFile_);
-			recordFile_ = nullptr;
-			replayState_ = ReplayNop;
-		}
+		loadNext();
 	}
 }
 

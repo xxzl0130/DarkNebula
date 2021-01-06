@@ -15,7 +15,6 @@ namespace DarkNebulaSharp
     {
         public SimNode()
         {
-            ChunkDict = new Dictionary<string, Chunk>();
         }
 
         ~SimNode()
@@ -179,7 +178,7 @@ namespace DarkNebulaSharp
             }
         }
 
-        // 回放模式后退一步的回调函数，可以不设置，则使用推进函数
+        // 回放推进回调函数，可以不设置，则使用普通仿真函数
         private SimStepDelegate replayStepCallback;
         public SimStepDelegate ReplayStepCallback
         {
@@ -191,7 +190,7 @@ namespace DarkNebulaSharp
             }
         }
 
-        // 回放推进函数，不设置时遇到回放将调用普通仿真函数
+        // 回放模式后退一步函数，不设置时遇到回放将调用普通仿真函数
         private SimStepDelegate replayStepBackCallback;
         public SimStepDelegate ReplayStepBackCallback
         {
@@ -274,18 +273,25 @@ namespace DarkNebulaSharp
 
             Poller?.Dispose();
             Poller = new NetMQPoller {SubSocket};
-            Poller.Run();
+            Poller.Run(); // blocking
+
+            WorkMutex.ReleaseMutex();
         }
 
         protected override void SocketReady(object sender, NetMQSocketEventArgs e)
         {
-            var topic = e.Socket.ReceiveFrameString();
+            var topic = System.Text.Encoding.UTF8.GetString(e.Socket.ReceiveFrameBytes());
             if (topic == DNVars.COMMAND_TOPIC) // 管理节点消息
             {
                 ProcessAdminCommand();
                 return;
             }
             // 数据节点消息
+            if (ChunkDict.ContainsKey(topic))
+            {
+                var chunk = ChunkDict[topic];
+                e.Socket.Receive(ref chunk.Buffer);
+            }
         }
 
         // 发送注册消息
@@ -376,19 +382,108 @@ namespace DarkNebulaSharp
                     simState = SimStates.SimInit;
                     initCallback?.Invoke();
                     Send2Admin(CommandCode.COMMAND_INIT, ok);
-
                     break;
                 case CommandCode.COMMAND_START:
+                    simSteps = 0;
+                    curTime = 0;
+                    simState = SimStates.SimRun;
+                    startCallback?.Invoke();
                     break;
                 case CommandCode.COMMAND_STEP_FORWARD:
+                    simState = SimStates.SimRun;
+                    if (ReplayState == (int) ReplayStates.Replaying)
+                    {
+                        LoadNext();
+                    }
+
+                    if (!slowNode)
+                    {
+                        if (ReplayState == (int) ReplayStates.Replaying && replayStepCallback != null)
+                        {
+                            replayStepCallback(simSteps, curTime);
+                        }
+                        else
+                        {
+                            simStepCallback?.Invoke(simSteps, curTime);
+                        }
+                        ++simSteps;
+                    }
+                    else if (!slowRunning)
+                    {
+                        slowThread = new Thread(() =>
+                        {
+                            slowMutex.WaitOne();
+                            slowRunning = true;
+
+                            if (ReplayState == (int)ReplayStates.Replaying && replayStepCallback != null)
+                            {
+                                replayStepCallback(simSteps, curTime);
+                            }
+                            else
+                            {
+                                simStepCallback?.Invoke(simSteps, curTime);
+                            }
+                            ++simSteps;
+
+                            slowRunning = false;
+                            slowMutex.ReleaseMutex();
+                        });
+                    }
+
+                    SendChunks();
+                    Send2Admin(CommandCode.COMMAND_STEP_FORWARD,simSteps);
                     break;
                 case CommandCode.COMMAND_STEP_BACKWARD:
+                    simState = SimStates.SimRun;
+                    if (ReplayState == (int)ReplayStates.Replaying)
+                    {
+                        LoadBack();
+                    }
+
+                    if (!slowNode)
+                    {
+                        if (ReplayState == (int)ReplayStates.Replaying && replayStepBackCallback != null)
+                        {
+                            replayStepBackCallback(simSteps, curTime);
+                        }
+                        else
+                        {
+                            simStepCallback?.Invoke(simSteps, curTime);
+                        }
+                        --simSteps;
+                    }
+                    else if (!slowRunning)
+                    {
+                        slowThread = new Thread(() =>
+                        {
+                            slowMutex.WaitOne();
+                            slowRunning = true;
+
+                            if (ReplayState == (int)ReplayStates.Replaying && replayStepBackCallback != null)
+                            {
+                                replayStepBackCallback(simSteps, curTime);
+                            }
+                            else
+                            {
+                                simStepCallback?.Invoke(simSteps, curTime);
+                            }
+                            --simSteps;
+
+                            slowRunning = false;
+                            slowMutex.ReleaseMutex();
+                        });
+                    }
+
+                    SendChunks();
+                    Send2Admin(CommandCode.COMMAND_STEP_FORWARD, simSteps);
                     break;
                 case CommandCode.COMMAND_PAUSE:
+                    simState = SimStates.SimPause;
+                    pauseCallback?.Invoke();
                     break;
                 case CommandCode.COMMAND_STOP:
-                    break;
-                default:
+                    simState = SimStates.SimStop;
+                    stopCallback?.Invoke();
                     break;
             }
         }
@@ -414,6 +509,7 @@ namespace DarkNebulaSharp
             }
 
             var chunks = info["chunks"].Value<JObject>();
+            recordSize = 0;
             foreach (var it in ChunkDict)
             {
                 if (chunks.ContainsKey(it.Key))
@@ -425,6 +521,7 @@ namespace DarkNebulaSharp
                     {
                         it.Value.Socket = new PublisherSocket();
                         it.Value.Socket.Bind("tcp://*:" + it.Value.Port.ToString());
+                        recordSize += it.Value.Buffer.Size;
                     }
                     else
                     {
@@ -437,6 +534,11 @@ namespace DarkNebulaSharp
                 {
                     return false;
                 }
+            }
+            
+            if (recordSize != 0)
+            {
+                recordBuffer = new byte[recordSize];
             }
 
             // 记录文件
@@ -465,6 +567,8 @@ namespace DarkNebulaSharp
             catch (IOException)
             {
                 ReplayState = (int)ReplayStates.ReplayNop;
+                recordFileStream?.Dispose();
+                recordFileStream = null;
                 return false;
             }
 
@@ -494,20 +598,57 @@ namespace DarkNebulaSharp
         // 加载下一帧数据
         private void LoadNext()
         {
-            throw new System.NotImplementedException();
+            if (ReplayState != (int) ReplayStates.Replaying || recordFileStream == null) 
+                return;
+            try
+            {
+                if (recordFileStream.Read(recordBuffer, 0, recordSize) < recordSize)
+                {
+                    ReplayState = (int)ReplayStates.ReplayNop;
+                    recordFileStream?.Dispose();
+                    recordFileStream = null;
+                    return;
+                }
+                var offset = 0;
+                foreach (var it in ChunkDict.Where(it => it.Value.Own))
+                {
+                    it.Value.Buffer.Put(recordBuffer.Skip(offset).ToArray(), 0, it.Value.Buffer.Size);
+                    offset += it.Value.Buffer.Size;
+                }
+            }
+            catch (IOException)
+            {
+                ReplayState = (int) ReplayStates.ReplayNop;
+                recordFileStream?.Dispose();
+                recordFileStream = null;
+                return;
+            }
         }
 
         // 加载前一帧数据
         private void LoadBack()
         {
-            throw new System.NotImplementedException();
+            if (ReplayState != (int)ReplayStates.Replaying || recordFileStream == null)
+                return;
+            recordFileStream.Seek(-2 * recordSize, SeekOrigin.Current);
+            LoadNext();
         }
 
         // 数据块
-        private Dictionary<string, Chunk> ChunkDict;
+        private Dictionary<string, Chunk> ChunkDict = new Dictionary<string, Chunk>();
         // 本节点ID
         private int ID = -1;
-
+        // 记录文件流
         private FileStream recordFileStream;
+        // 记录文件一帧大小
+        private int recordSize;
+        // 缓冲区
+        private byte[] recordBuffer;
+        // slow线程
+        private Thread slowThread;
+        // slow锁
+        private Mutex slowMutex = new Mutex(false);
+        // slow标志
+        private bool slowRunning = false;
     }
 }

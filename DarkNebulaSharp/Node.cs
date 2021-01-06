@@ -38,16 +38,16 @@ namespace DarkNebulaSharp
         protected SubscriberSocket SubSocket;
         // 工作线程
         protected Thread WorkThread;
-        // 监听线程停止标志
+        // 工作线程停止标志
         protected bool WorkStop;
-        // 监听锁
+        // 工作锁
         protected Mutex WorkMutex;
 
         protected UInt32 simSteps;
         // 仿真步数
         public UInt32 SimSteps { get => simSteps; }
 
-        private double curTime;
+        protected double curTime;
         // 当前仿真时间
         public double CurTime { get => curTime; }
 
