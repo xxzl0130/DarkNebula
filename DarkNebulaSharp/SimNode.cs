@@ -212,7 +212,8 @@ namespace DarkNebulaSharp
         {
             if (running)
                 return;
-            ChunkDict[name] = new Chunk(name,size,own);
+            chunkDict[name] = chunkList.Count;
+            chunkList.Add(new Chunk(name, size, own));
         }
 
         /// <summary>
@@ -223,9 +224,9 @@ namespace DarkNebulaSharp
         /// <param name="data">数据</param>
         public void SetChunkData<T>(string name, T data)
         {
-            if (ChunkDict.ContainsKey(name))
+            if (chunkDict.ContainsKey(name))
             {
-                var chunk = ChunkDict[name];
+                var chunk = chunkList[chunkDict[name]];
                 if (chunk.Own)
                 {
                     chunk.Buffer = Utils.StructureToByte(data);
@@ -241,9 +242,9 @@ namespace DarkNebulaSharp
         /// <param name="data">数据</param>
         public void GetChunkData<T>(string name, out T data)
         {
-            if (ChunkDict.ContainsKey(name))
+            if (chunkDict.ContainsKey(name))
             {
-                var chunk = ChunkDict[name];
+                var chunk = chunkList[chunkDict[name]];
                 data = Utils.ByteToStructure<T>(chunk.Buffer.ToArray());
             }
             else
@@ -287,9 +288,9 @@ namespace DarkNebulaSharp
                 return;
             }
             // 数据节点消息
-            if (ChunkDict.ContainsKey(topic))
+            if (chunkDict.ContainsKey(topic))
             {
-                var chunk = ChunkDict[topic];
+                var chunk = chunkList[chunkDict[topic]];
                 chunk.Buffer = e.Socket.ReceiveFrameBytes();
             }
         }
@@ -300,12 +301,12 @@ namespace DarkNebulaSharp
             var info = new JObject {["name"] = nodeName, ["ip"] = nodeIP, ["slow"] = slowNode};
             var chunks = new JArray();
             var port = chunkPort;
-            foreach (var it in ChunkDict)
+            foreach (var it in chunkList)
             {
-                var chunk = new JObject {["name"] = it.Value.Name, ["own"] = it.Value.Own};
-                if (it.Value.Own)
-                    it.Value.Port = port++;
-                chunk["port"] = it.Value.Port;
+                var chunk = new JObject {["name"] = it.Name, ["own"] = it.Own};
+                if (it.Own)
+                    it.Port = port++;
+                chunk["port"] = it.Port;
                 chunks.Add(chunk);
             }
 
@@ -381,6 +382,9 @@ namespace DarkNebulaSharp
 
                     simState = SimStates.SimInit;
                     initCallback?.Invoke();
+                    //SendChunks();
+                    //Thread.Sleep(100);
+                    //SendChunks();
                     Send2Admin(CommandCode.COMMAND_INIT, ok);
                     break;
                 case CommandCode.COMMAND_START:
@@ -407,6 +411,7 @@ namespace DarkNebulaSharp
                             simStepCallback?.Invoke(simSteps, curTime);
                         }
                         ++simSteps;
+                        SendChunks();
                     }
                     else if (!slowRunning)
                     {
@@ -425,13 +430,13 @@ namespace DarkNebulaSharp
                             }
                             ++simSteps;
 
+                            SendChunks();
                             slowRunning = false;
                             slowMutex.ReleaseMutex();
                         });
                         slowThread.Start();
                     }
 
-                    SendChunks();
                     Send2Admin(CommandCode.COMMAND_STEP_FORWARD,simSteps);
                     break;
                 case CommandCode.COMMAND_STEP_BACKWARD:
@@ -452,6 +457,7 @@ namespace DarkNebulaSharp
                             simStepCallback?.Invoke(simSteps, curTime);
                         }
                         --simSteps;
+                        SendChunks();
                     }
                     else if (!slowRunning)
                     {
@@ -470,12 +476,12 @@ namespace DarkNebulaSharp
                             }
                             --simSteps;
 
+                            SendChunks();
                             slowRunning = false;
                             slowMutex.ReleaseMutex();
                         });
                     }
 
-                    SendChunks();
                     Send2Admin(CommandCode.COMMAND_STEP_FORWARD, simSteps);
                     break;
                 case CommandCode.COMMAND_PAUSE:
@@ -512,26 +518,26 @@ namespace DarkNebulaSharp
 
             var chunks = info["chunks"].Value<JObject>();
             recordSize = 0;
-            foreach (var it in ChunkDict)
+            foreach (var it in chunkList)
             {
-                if (chunks.ContainsKey(it.Key))
+                if (chunks.ContainsKey(it.Name))
                 {
-                    var obj = chunks[it.Key];
-                    it.Value.ID = obj["id"].Value<int>();
-                    it.Value.Socket?.Dispose();
-                    if (it.Value.Own) // Pub
+                    var obj = chunks[it.Name];
+                    it.ID = obj["id"].Value<int>();
+                    it.Socket?.Dispose();
+                    if (it.Own) // Pub
                     {
-                        it.Value.Socket = new PublisherSocket();
-                        it.Value.Socket.Bind("tcp://*:" + it.Value.Port.ToString());
-                        recordSize += it.Value.Buffer.Length;
+                        it.Socket = new PublisherSocket();
+                        it.Socket.Bind("tcp://*:" + it.Port.ToString());
+                        recordSize += it.Buffer.Length;
                     }
                     else
                     {
-                        it.Value.Socket = new SubscriberSocket();
-                        it.Value.Socket.Connect(obj["path"].Value<string>());
-                        ((SubscriberSocket)it.Value.Socket).Subscribe(System.Text.Encoding.UTF8.GetBytes(it.Value.Name));
-                        it.Value.Socket.ReceiveReady += SocketReady;
-                        Poller.Add(it.Value.Socket);
+                        it.Socket = new SubscriberSocket();
+                        it.Socket.Connect(obj["path"].Value<string>());
+                        ((SubscriberSocket)it.Socket).Subscribe(System.Text.Encoding.UTF8.GetBytes(it.Name));
+                        it.Socket.ReceiveReady += SocketReady;
+                        Poller.Add(it.Socket);
                     }
                 }
                 else
@@ -577,7 +583,7 @@ namespace DarkNebulaSharp
             }
 
             // 等待连接
-            Thread.Sleep(50);
+            Thread.Sleep(500);
             return true;
         }
 
@@ -585,17 +591,18 @@ namespace DarkNebulaSharp
         private void SendChunk(Chunk chunk)
         {
             chunk.Socket.SendMoreFrame(chunk.Name).SendFrame(chunk.Buffer);
+            if (ReplayState == (int)ReplayStates.Recording)
+            {
+                recordFileStream?.Write(chunk.Buffer,0,chunk.Buffer.Length);
+            }
         }
 
         // 发布自己所有要发布的数据块
         private void SendChunks()
         {
-            foreach (var it in ChunkDict)
+            foreach (var it in chunkList.Where(it => it.Own))
             {
-                if (it.Value.Own)
-                {
-                    SendChunk(it.Value);
-                }
+                SendChunk(it);
             }
         }
 
@@ -614,10 +621,10 @@ namespace DarkNebulaSharp
                     return;
                 }
                 var offset = 0;
-                foreach (var it in ChunkDict.Where(it => it.Value.Own))
+                foreach (var it in chunkList.Where(it => it.Own))
                 {
-                    it.Value.Buffer = recordBuffer.Skip(offset).ToArray();
-                    offset += it.Value.Buffer.Length;
+                    it.Buffer = recordBuffer.Skip(offset).ToArray();
+                    offset += it.Buffer.Length;
                 }
             }
             catch (IOException)
@@ -639,7 +646,9 @@ namespace DarkNebulaSharp
         }
 
         // 数据块
-        private Dictionary<string, Chunk> ChunkDict = new Dictionary<string, Chunk>();
+        private Dictionary<string, int> chunkDict = new Dictionary<string, int>();
+        // 数据块顺序
+        private List<Chunk> chunkList = new List<Chunk>();
         // 本节点ID
         private int ID = -1;
         // 记录文件流

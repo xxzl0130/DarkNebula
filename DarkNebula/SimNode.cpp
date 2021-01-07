@@ -300,6 +300,9 @@ void dn::SimNode::processAdminCommand()
 				memcpy_s(it.buffer.get(), it.size, it.pData, it.size);
 			}
 		}
+		sendChunks();
+		std::this_thread::sleep_for(std::chrono::milliseconds(50));
+		sendChunks();
 		send2Admin(COMMAND_INIT, &ok, sizeof ok);
 	}
 		break;
@@ -324,6 +327,12 @@ void dn::SimNode::processAdminCommand()
 				replayStepCallback_(simSteps_, curTime_);
 			else if (simStepCallback_)
 				simStepCallback_(simSteps_, curTime_);
+			// 覆盖数据
+			if (replayState_ == Replaying)
+			{
+				copyOwnChunks();
+			}
+			sendChunks();
 			++simSteps_;
 		}
 		else
@@ -342,14 +351,16 @@ void dn::SimNode::processAdminCommand()
 							simStepCallback_(simSteps_, curTime_);
 						++simSteps_;
 						slowRunning_ = false;
+						// 覆盖数据
+						if (replayState_ == Replaying)
+						{
+							copyOwnChunks();
+						}
+						sendChunks();
 					});
 				slowThread_->detach();
 			}
 		}
-		// 覆盖数据
-		if (replayState_ == Replaying)
-			copyOwnChunks();
-		sendChunks();
 		send2Admin(COMMAND_STEP_FORWARD, &simSteps_, sizeof simSteps_);
 		break;
 	case COMMAND_STEP_BACKWARD:
@@ -367,6 +378,12 @@ void dn::SimNode::processAdminCommand()
 			else if (simStepCallback_)
 				simStepCallback_(simSteps_, curTime_);
 			--simSteps_;
+			// 覆盖数据
+			if (replayState_ == Replaying)
+			{
+				copyOwnChunks();
+			}
+			sendChunks();
 		}
 		else
 		{
@@ -383,17 +400,18 @@ void dn::SimNode::processAdminCommand()
 						else if (simStepCallback_)
 							simStepCallback_(simSteps_, curTime_);
 						--simSteps_;
+
+						// 覆盖数据
+						if (replayState_ == Replaying)
+						{
+							copyOwnChunks();
+						}
+						sendChunks();
 						slowRunning_ = false;
 					});
 				slowThread_->detach();
 			}
 		}
-		// 覆盖数据
-		if (replayState_ == Replaying)
-		{
-			copyOwnChunks();
-		}
-		sendChunks();
 		send2Admin(COMMAND_STEP_BACKWARD, &simSteps_, sizeof simSteps_);
 		break;
 	case COMMAND_PAUSE:
@@ -467,7 +485,7 @@ bool dn::SimNode::init()
 	auto filename = recordFolder_ + "/" + recordName_ + "_" + nodeName_ + RECORD_FILE_SUFFIX;
 	if (recordFile_)
 		fclose(recordFile_);
-	if(replayState_ == Replaying)
+	if(replayState_ == Replaying && recordSize_)
 	{
 		if(fopen_s(&recordFile_, filename.c_str(), "rb") == 0)
 		{
@@ -502,7 +520,7 @@ bool dn::SimNode::init()
 	}
 	
 	// 等待建立连接
-	std::this_thread::sleep_for(std::chrono::milliseconds(50));
+	std::this_thread::sleep_for(std::chrono::milliseconds(500));
 	return true;
 }
 

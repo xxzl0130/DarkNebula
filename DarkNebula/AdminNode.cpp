@@ -191,6 +191,7 @@ void dn::AdminNode::initSim()
 		obj["name"] = nodeList_[i].name;
 		obj["id"] = i;
 		nodes[nodeList_[i].name] = obj;
+		nodeList_[i].init = false;
 		if (nodeList_[i].slow)
 			++slowNodeCount_;
 	}

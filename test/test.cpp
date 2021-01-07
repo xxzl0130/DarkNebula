@@ -25,6 +25,8 @@ int main()
 			if (id == dn::ALL_NODE)
 			{
 				cout << "All init!" << endl;
+				//Sleep(500);
+				cout << "Start!" << endl;
 				admin.startSim();
 				return;
 			}
@@ -60,8 +62,8 @@ int main()
 	
 	system("pause");
 	//Sleep(100);
-	admin.setRecord(true, "test");
-	//admin.setReplay(true, "test");
+	//admin.setRecord(true, "test");
+	admin.setReplay(true, "test");
 	admin.initSim();
 	Sleep(100);
 	//system("pause");

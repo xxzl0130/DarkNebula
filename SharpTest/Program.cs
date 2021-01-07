@@ -19,7 +19,7 @@ namespace SharpTest
             var node = new DarkNebulaSharp.SimNode
             {
                 ChunkPort = 20000, NodeName = "sharp", AdminRecvPort = 16666, AdminSendPort = 18888, 
-                SlowNode = true
+                SlowNode = false
             };
             node.AddChunk("counter", sizeof(int), true);
             node.SimStepCallback = (step, time) =>
@@ -38,7 +38,19 @@ namespace SharpTest
             Console.ReadKey();
             node.RegIn();
 
+            var sub = new SubscriberSocket("tcp://127.0.0.1:20000");
+            sub.Subscribe("counter");
+            var poller = new NetMQPoller {sub};
+            sub.ReceiveReady += Sub_ReceiveReady;
+            poller.RunAsync();
+
             Console.ReadKey();
+        }
+
+        private static void Sub_ReceiveReady(object sender, NetMQSocketEventArgs e)
+        {
+            var bytes = e.Socket.ReceiveFrameBytes();
+            Console.WriteLine("sub:" + bytes[0]);
         }
 
         public static byte[] StructureToByte<T>(T structure)
