@@ -403,6 +403,8 @@ void dn::SimNode::processAdminCommand()
 		break;
 	case COMMAND_STOP:
 		simState_ = SimStop;
+		if (recordFile_)
+			fclose(recordFile_);
 		if (stopCallback_)
 			stopCallback_();
 		break;

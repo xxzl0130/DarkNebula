@@ -38,7 +38,7 @@ int main()
 	dn::SimNode node2("node2", "127.0.0.1", 30000, false, "127.0.0.1", 16666, 18888);
 	int counter = 0;
 	node1.addChunk("counter", counter, true);
-	node1.regIn();
+	//node1.regIn();
 	node1.setInitCallback([&]()
 	{
 		counter = 0;
@@ -55,12 +55,12 @@ int main()
 	node2.setSimStepCallback([&](unsigned step, double time)
 		{
 			cout << "Node 2: " << counterRecv << endl;
-			std::this_thread::sleep_for(std::chrono::milliseconds(1800));
+			////std::this_thread::sleep_for(std::chrono::milliseconds(1800));
 		});
 	
 	system("pause");
 	//Sleep(100);
-	//admin.setRecord(true, "test");
+	admin.setRecord(true, "test");
 	//admin.setReplay(true, "test");
 	admin.initSim();
 	Sleep(100);

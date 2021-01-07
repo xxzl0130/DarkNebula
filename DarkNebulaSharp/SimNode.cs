@@ -484,6 +484,7 @@ namespace DarkNebulaSharp
                     break;
                 case CommandCode.COMMAND_STOP:
                     simState = SimStates.SimStop;
+                    recordFileStream?.Close();
                     stopCallback?.Invoke();
                     break;
             }
