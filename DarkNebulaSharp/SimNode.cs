@@ -5,6 +5,7 @@ using System.Runtime.InteropServices;
 using System.Threading;
 using System.IO;
 using NetMQ;
+using NetMQ.Monitoring;
 using NetMQ.Sockets;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
@@ -19,7 +20,8 @@ namespace DarkNebulaSharp
 
         ~SimNode()
         {
-            StopWorking();
+            Poller?.Stop();
+            Poller = null;
         }
 
         private string nodeName;
@@ -518,6 +520,10 @@ namespace DarkNebulaSharp
 
             var chunks = info["chunks"].Value<JObject>();
             recordSize = 0;
+            var monitorPoller = new NetMQPoller();
+            var monitors = new List<NetMQMonitor>();
+            var monitorSockets = new List<NetMQSocket>();
+            int connected = 0, subCount = 0;
             foreach (var it in chunkList)
             {
                 if (chunks.ContainsKey(it.Name))
@@ -533,11 +539,38 @@ namespace DarkNebulaSharp
                     }
                     else
                     {
+                        ++subCount;
                         it.Socket = new SubscriberSocket();
                         it.Socket.Connect(obj["path"].Value<string>());
                         ((SubscriberSocket)it.Socket).Subscribe(System.Text.Encoding.UTF8.GetBytes(it.Name));
                         it.Socket.ReceiveReady += SocketReady;
                         Poller.Add(it.Socket);
+
+                        var monitor = new NetMQMonitor(it.Socket, "inproc://monitor-" + it.Name, SocketEvents.Connected);
+                        var socket = new PairSocket();
+                        socket.Connect("inproc://monitor-" + it.Name);
+                        monitor.EventReceived += (s, e) =>
+                        {
+                            Console.WriteLine(e.SocketEvent);
+                        };
+                        monitor.Connected += (s, e) =>
+                        {
+                            Console.WriteLine(e.SocketEvent);
+                        };
+                        monitor.StartAsync();
+                        socket.ReceiveReady += (s, e) =>
+                        {
+                            var bytes = e.Socket.ReceiveFrameBytes();
+                            var code = Utils.ByteToStructure<UInt16>(bytes);
+                            if (code == (UInt16) SocketEvents.Connected)
+                            {
+                                ++connected;
+                            }
+                        };
+                        monitor.AttachToPoller(monitorPoller);
+                        monitorPoller.Add(socket);
+                        monitorSockets.Add(socket);
+                        monitors.Add(monitor);
                     }
                 }
                 else
@@ -582,9 +615,23 @@ namespace DarkNebulaSharp
                 return false;
             }
 
-            // 等待连接
-            Thread.Sleep(500);
-            return true;
+            monitorPoller.RunAsync();
+
+            var t0 = System.DateTime.Now;
+            var ok = false;
+            while ((System.DateTime.Now - t0).TotalMilliseconds < 3000) // 等待三秒
+            {
+                if (connected >= subCount)
+                {
+                    ok = true;
+                    break;
+                }
+                Thread.Sleep(1);
+            }
+
+            monitorPoller?.Dispose();
+
+            return ok;
         }
 
         // 发送一个数据块

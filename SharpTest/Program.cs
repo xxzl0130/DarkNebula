@@ -21,12 +21,12 @@ namespace SharpTest
                 ChunkPort = 20000, NodeName = "sharp", AdminRecvPort = 16666, AdminSendPort = 18888, 
                 SlowNode = false
             };
-            node.AddChunk("counter", sizeof(int), true);
+            node.AddChunk("counter", sizeof(int), false);
             node.SimStepCallback = (step, time) =>
             {
-                //node.GetChunkData("counter",out counter);
-                counter++;
-                node.SetChunkData("counter", counter);
+                node.GetChunkData("counter",out counter);
+                //counter++;
+                //node.SetChunkData("counter", counter);
                 Console.WriteLine(counter);
                 //Thread.Sleep(1500);
             };
@@ -45,6 +45,7 @@ namespace SharpTest
             poller.RunAsync();
 
             Console.ReadKey();
+            poller.Dispose();
         }
 
         private static void Sub_ReceiveReady(object sender, NetMQSocketEventArgs e)

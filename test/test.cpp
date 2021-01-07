@@ -40,7 +40,7 @@ int main()
 	dn::SimNode node2("node2", "127.0.0.1", 30000, false, "127.0.0.1", 16666, 18888);
 	int counter = 0;
 	node1.addChunk("counter", counter, true);
-	//node1.regIn();
+	node1.regIn();
 	node1.setInitCallback([&]()
 	{
 		counter = 0;

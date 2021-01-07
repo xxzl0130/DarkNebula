@@ -300,9 +300,6 @@ void dn::SimNode::processAdminCommand()
 				memcpy_s(it.buffer.get(), it.size, it.pData, it.size);
 			}
 		}
-		sendChunks();
-		std::this_thread::sleep_for(std::chrono::milliseconds(50));
-		sendChunks();
 		send2Admin(COMMAND_INIT, &ok, sizeof ok);
 	}
 		break;
@@ -449,6 +446,8 @@ bool dn::SimNode::init()
 	const auto& chunksInfo = info["chunks"];
 	pollitems_.resize(1); //仅保留接收指令的socket
 	recordSize_ = 0;
+
+	std::vector<zmq_pollitem_t> monitors;
 	// 初始化数据块
 	for (auto& chunk : chunkList_)
 	{
@@ -471,6 +470,14 @@ bool dn::SimNode::init()
 				chunk.socket = zmq_socket(socketContext_, ZMQ_SUB);
 				zmq_connect(chunk.socket,obj["path"].get<std::string>().c_str());
 				zmq_setsockopt(chunk.socket, ZMQ_SUBSCRIBE, chunk.name.c_str(), chunk.name.size());
+				auto monitorAddr = "inproc://monitor-" + chunk.name;
+				zmq_socket_monitor(chunk.socket, monitorAddr.c_str(), ZMQ_EVENT_CONNECTED);
+				zmq_pollitem_t monitor;
+				monitor.socket = zmq_socket(socketContext_, ZMQ_PAIR);
+				zmq_connect(monitor.socket, monitorAddr.c_str());
+				monitor.fd = 0;
+				monitor.events = ZMQ_POLLIN;
+				monitors.emplace_back(monitor);
 			}
 			// 全部加入监听列表
 			zmq_pollitem_t item{ chunk.socket, 0, ZMQ_POLLIN };
@@ -480,6 +487,7 @@ bool dn::SimNode::init()
 			return false;
 	}
 
+	// 记录文件操作
 	if(recordSize_)
 		recordBuffer_.reset(new char[recordSize_]);
 	auto filename = recordFolder_ + "/" + recordName_ + "_" + nodeName_ + RECORD_FILE_SUFFIX;
@@ -518,10 +526,44 @@ bool dn::SimNode::init()
 			return false;
 		}
 	}
+
+	if(monitors.empty())
+		return true;
+	auto t0 = std::chrono::steady_clock::now();
+	auto connected = 0;
+	zmq_msg_t msg;
+	bool ok = false;
+	// 等待建立连接，3s
+	while (std::chrono::duration_cast<std::chrono::seconds>(std::chrono::steady_clock::now() - t0).count() < 3.0 && !ok)
+	{
+		if(zmq_poll(monitors.data(),monitors.size(),1) <= 0)
+			continue;
+		for(auto& it : monitors)
+		{
+			if(!(it.revents & ZMQ_POLLIN))
+				continue;
+			zmq_msg_init(&msg);
+			zmq_msg_recv(&msg, it.socket, 0);
+			auto event = *static_cast<uint16_t*>(zmq_msg_data(&msg));
+			zmq_msg_init(&msg);
+			zmq_msg_recv(&msg, it.socket, 0);
+			zmq_msg_close(&msg);
+				
+			if (event == ZMQ_EVENT_CONNECTED)
+			{
+				++connected;
+				if(connected >= monitors.size())
+				{
+					ok = true;
+					break;
+				}
+			}
+		}
+	}
+	for (auto& it : monitors)
+		zmq_close(it.socket);
 	
-	// 等待建立连接
-	std::this_thread::sleep_for(std::chrono::milliseconds(500));
-	return true;
+	return ok;
 }
 
 void dn::SimNode::sendChunk(Chunk& chunk)

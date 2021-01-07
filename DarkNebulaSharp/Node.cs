@@ -30,6 +30,9 @@ namespace DarkNebulaSharp
         ~Node()
         {
             StopWorking();
+            Poller?.Dispose();
+            PubSocket?.Dispose();
+            NetMQConfig.Cleanup();
         }
 
         // 发布指令的socket
@@ -84,7 +87,8 @@ namespace DarkNebulaSharp
         protected void StopWorking()
         {
             WorkStop = true;
-            Poller?.Dispose();
+            Poller?.Stop();
+            Poller = null;
             WorkMutex.WaitOne();
             WorkStop = false;
             WorkThread = null;
