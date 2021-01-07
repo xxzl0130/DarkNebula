@@ -5,14 +5,12 @@ using NetMQ.Sockets;
 
 namespace DarkNebulaSharp
 {
-    public abstract class Node
+    public abstract class Node : IDisposable
     {
         protected Node()
         {
             PubSocket = null;
             SubSocket = null;
-            WorkThread = null;
-            WorkStop = false;
             simSteps = 0;
             curTime = 0;
             SimTime = 10;
@@ -21,7 +19,6 @@ namespace DarkNebulaSharp
             simState = SimStates.SimNop;
             ReplayState = (int) ReplayStates.ReplayNop;
             RecordName = "";
-            WorkMutex = new Mutex(false);
             Poller = new NetMQPoller();
             OutBuffer = new byte[1*1024*1024];
             InBuffer = null;
@@ -32,19 +29,19 @@ namespace DarkNebulaSharp
             StopWorking();
             Poller?.Dispose();
             PubSocket?.Dispose();
-            NetMQConfig.Cleanup();
+        }
+
+        public void Dispose()
+        {
+            StopWorking();
+            Poller?.Dispose();
+            PubSocket?.Dispose();
         }
 
         // 发布指令的socket
         protected PublisherSocket PubSocket;
         // 接收回报的socket
         protected SubscriberSocket SubSocket;
-        // 工作线程
-        protected Thread WorkThread;
-        // 工作线程停止标志
-        protected bool WorkStop;
-        // 工作锁
-        protected Mutex WorkMutex;
 
         protected UInt32 simSteps;
         // 仿真步数
@@ -74,27 +71,18 @@ namespace DarkNebulaSharp
         // 开始工作线程
         protected void StartWorking()
         {
-            if (WorkThread != null)
-            {
-                StopWorking();
-                WorkThread = null;
-            }
-
-            WorkThread = new Thread(Working) {IsBackground = true};
-            WorkThread.Start();
+            StopWorking();
+            Poller?.Dispose();
+            Poller = new NetMQPoller { SubSocket };
+            Poller.RunAsync(); // non-blocking
         }
         // 停止工作线程
         protected void StopWorking()
         {
-            WorkStop = true;
             Poller?.Stop();
+            Poller?.Dispose();
             Poller = null;
-            WorkMutex.WaitOne();
-            WorkStop = false;
-            WorkThread = null;
         }
-        // 工作线程
-        protected abstract void Working();
         // socket事件响应
         protected abstract void SocketReady(object sender, NetMQSocketEventArgs e);
 

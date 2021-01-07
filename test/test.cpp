@@ -31,7 +31,7 @@ int main()
 				return;
 			}
 			const auto node = admin.getNodeList()[id];
-			cout << "Init :" << node.name << endl;
+			cout << "Init :" << node.name << " " << node.init << endl;
 		});
 	admin.setStepTime(1000);
 	admin.setSimTime(20);
@@ -63,7 +63,7 @@ int main()
 	system("pause");
 	//Sleep(100);
 	//admin.setRecord(true, "test");
-	admin.setReplay(true, "test");
+	//admin.setReplay(true, "test");
 	admin.initSim();
 	Sleep(100);
 	//system("pause");

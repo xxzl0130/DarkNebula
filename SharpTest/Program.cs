@@ -8,6 +8,7 @@ using System.Threading.Tasks;
 using NetMQ;
 using NetMQ.Sockets;
 using DarkNebulaSharp;
+using NetMQ.Monitoring;
 
 namespace SharpTest
 {
@@ -16,6 +17,7 @@ namespace SharpTest
         private static int counter = 0;
         static void Main(string[] args)
         {
+
             var node = new DarkNebulaSharp.SimNode
             {
                 ChunkPort = 20000, NodeName = "sharp", AdminRecvPort = 16666, AdminSendPort = 18888, 
@@ -35,6 +37,7 @@ namespace SharpTest
                 node.GetChunkData("counter", out counter);
                 Console.WriteLine(counter);
             };
+            Console.WriteLine("Press to reg in");
             Console.ReadKey();
             node.RegIn();
 
@@ -44,8 +47,11 @@ namespace SharpTest
             sub.ReceiveReady += Sub_ReceiveReady;
             poller.RunAsync();
 
+            Console.WriteLine("Press to end");
             Console.ReadKey();
             poller.Dispose();
+            Console.WriteLine("end");
+            node.Dispose();
         }
 
         private static void Sub_ReceiveReady(object sender, NetMQSocketEventArgs e)

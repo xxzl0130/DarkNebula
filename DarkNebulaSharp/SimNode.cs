@@ -4,6 +4,7 @@ using System.Linq;
 using System.Runtime.InteropServices;
 using System.Threading;
 using System.IO;
+using System.Threading.Tasks;
 using NetMQ;
 using NetMQ.Monitoring;
 using NetMQ.Sockets;
@@ -20,8 +21,6 @@ namespace DarkNebulaSharp
 
         ~SimNode()
         {
-            Poller?.Stop();
-            Poller = null;
         }
 
         private string nodeName;
@@ -270,16 +269,6 @@ namespace DarkNebulaSharp
         }
 
         private bool running = false;
-        protected override void Working()
-        {
-            WorkMutex.WaitOne();
-
-            Poller?.Dispose();
-            Poller = new NetMQPoller {SubSocket};
-            Poller.Run(); // blocking
-
-            WorkMutex.ReleaseMutex();
-        }
 
         protected override void SocketReady(object sender, NetMQSocketEventArgs e)
         {
@@ -520,9 +509,6 @@ namespace DarkNebulaSharp
 
             var chunks = info["chunks"].Value<JObject>();
             recordSize = 0;
-            var monitorPoller = new NetMQPoller();
-            var monitors = new List<NetMQMonitor>();
-            var monitorSockets = new List<NetMQSocket>();
             int connected = 0, subCount = 0;
             foreach (var it in chunkList)
             {
@@ -541,36 +527,20 @@ namespace DarkNebulaSharp
                     {
                         ++subCount;
                         it.Socket = new SubscriberSocket();
-                        it.Socket.Connect(obj["path"].Value<string>());
                         ((SubscriberSocket)it.Socket).Subscribe(System.Text.Encoding.UTF8.GetBytes(it.Name));
                         it.Socket.ReceiveReady += SocketReady;
                         Poller.Add(it.Socket);
-
-                        var monitor = new NetMQMonitor(it.Socket, "inproc://monitor-" + it.Name, SocketEvents.Connected);
-                        var socket = new PairSocket();
-                        socket.Connect("inproc://monitor-" + it.Name);
-                        monitor.EventReceived += (s, e) =>
+                        var name = "inproc://monitor-" + it.Name;
+                        var monitor = new NetMQMonitor(it.Socket, "inproc://monitor-" + it.Name, SocketEvents.Connected)
                         {
-                            Console.WriteLine(e.SocketEvent);
+                            Timeout = TimeSpan.FromMilliseconds(3000)
                         };
                         monitor.Connected += (s, e) =>
                         {
-                            Console.WriteLine(e.SocketEvent);
+                            ++connected;
                         };
-                        monitor.StartAsync();
-                        socket.ReceiveReady += (s, e) =>
-                        {
-                            var bytes = e.Socket.ReceiveFrameBytes();
-                            var code = Utils.ByteToStructure<UInt16>(bytes);
-                            if (code == (UInt16) SocketEvents.Connected)
-                            {
-                                ++connected;
-                            }
-                        };
-                        monitor.AttachToPoller(monitorPoller);
-                        monitorPoller.Add(socket);
-                        monitorSockets.Add(socket);
-                        monitors.Add(monitor);
+                        Task.Factory.StartNew(monitor.Start);
+                        it.Socket.Connect(obj["path"].Value<string>());
                     }
                 }
                 else
@@ -615,8 +585,6 @@ namespace DarkNebulaSharp
                 return false;
             }
 
-            monitorPoller.RunAsync();
-
             var t0 = System.DateTime.Now;
             var ok = false;
             while ((System.DateTime.Now - t0).TotalMilliseconds < 3000) // 等待三秒
@@ -628,8 +596,6 @@ namespace DarkNebulaSharp
                 }
                 Thread.Sleep(1);
             }
-
-            monitorPoller?.Dispose();
 
             return ok;
         }
