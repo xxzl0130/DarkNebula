@@ -61,6 +61,15 @@ namespace dn
 		Replaying = 0x20,		// 重放数据
 	};
 
+	enum ErrorCode : uint16_t
+	{
+		ERR_NOP		= 0,		// 无错误
+		ERR_SOCKET,				// socket错误
+		ERR_FILE_READ,			// 文件读取失败
+		ERR_FILE_WRITE,			// 文件写入失败
+		ERR_INFO,				// 信息不足
+	};
+
 	struct DN_EXPORT CommandHeader
 	{
 		// 节点ID，-1为全部

@@ -284,7 +284,7 @@ void dn::SimNode::processAdminCommand()
 	case COMMAND_INIT:
 	{
 		auto ok = init();
-		if(!ok)
+		if(ok != ERR_NOP)
 		{
 			send2Admin(COMMAND_INIT, &ok, sizeof ok);
 			break;
@@ -428,7 +428,7 @@ void dn::SimNode::processAdminCommand()
 	}
 }
 
-bool dn::SimNode::init()
+uint16_t dn::SimNode::init()
 {
 	auto* header = inHeader();
 	auto info = json::parse(std::string(inData(), header->size));
@@ -442,6 +442,10 @@ bool dn::SimNode::init()
 	if(nodes.contains(nodeName_))
 	{
 		id_ = nodes[nodeName_]["id"].get<int>();
+	}
+	else
+	{
+		return ERR_INFO;
 	}
 	const auto& chunksInfo = info["chunks"];
 	pollitems_.resize(1); //仅保留接收指令的socket
@@ -484,7 +488,7 @@ bool dn::SimNode::init()
 			pollitems_.emplace_back(item);
 		}
 		else
-			return false;
+			return ERR_INFO;
 	}
 
 	// 记录文件操作
@@ -503,13 +507,13 @@ bool dn::SimNode::init()
 			{
 				fclose(recordFile_);
 				recordFile_ = nullptr;
-				return false;
+				return ERR_FILE_READ;
 			}
 		}
 		else
 		{
 			recordFile_ = nullptr;
-			return false;
+			return ERR_FILE_READ;
 		}
 	}
 	else if(replayState_ == Recording && recordSize_)
@@ -523,12 +527,12 @@ bool dn::SimNode::init()
 		else
 		{
 			recordFile_ = nullptr;
-			return false;
+			return ERR_FILE_WRITE;
 		}
 	}
 
 	if(monitors.empty())
-		return true;
+		return ERR_NOP;
 	auto t0 = std::chrono::steady_clock::now();
 	auto connected = 0;
 	zmq_msg_t msg;
@@ -563,7 +567,7 @@ bool dn::SimNode::init()
 	for (auto& it : monitors)
 		zmq_close(it.socket);
 	
-	return ok;
+	return ok ? ERR_NOP : ERR_SOCKET;
 }
 
 void dn::SimNode::sendChunk(Chunk& chunk)

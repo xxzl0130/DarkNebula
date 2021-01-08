@@ -436,14 +436,15 @@ void dn::AdminNode::nodeReg(char* buffer, int len)
 void dn::AdminNode::nodeInit(char* buffer, int len)
 {
 	auto* header = reinterpret_cast<CommandHeader*>(buffer);
-	bool ok = false;
+	uint16_t code = ERR_NOP;
 	if(header->size)
 	{
-		ok = *reinterpret_cast<bool*>(inData());
+		code = *reinterpret_cast<uint16_t*>(inData());
 	}
 	if(header->ID < nodeList_.size())
 	{
-		nodeList_[header->ID].init = ok;
+		nodeList_[header->ID].init = code == ERR_NOP;
+		nodeList_[header->ID].errorCode = code;
 		if (initCallback_)
 		{
 			initCallback_(header->ID);

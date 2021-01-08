@@ -365,7 +365,7 @@ namespace DarkNebulaSharp
             {
                 case CommandCode.COMMAND_INIT:
                     var ok = Init();
-                    if (!ok)
+                    if (ok != (UInt16)ErrorCode.ERR_NOP)
                     {
                         Send2Admin(CommandCode.COMMAND_INIT, ok);
                         break;
@@ -373,9 +373,6 @@ namespace DarkNebulaSharp
 
                     simState = SimStates.SimInit;
                     initCallback?.Invoke();
-                    //SendChunks();
-                    //Thread.Sleep(100);
-                    //SendChunks();
                     Send2Admin(CommandCode.COMMAND_INIT, ok);
                     break;
                 case CommandCode.COMMAND_START:
@@ -488,12 +485,12 @@ namespace DarkNebulaSharp
         }
 
         // 处理初始化信息
-        private bool Init()
+        private UInt16 Init()
         {
             var str = System.Text.Encoding.UTF8.GetString(InBuffer.Skip(Marshal.SizeOf<CommandHeader>()).ToArray());
             var info = (JObject)JsonConvert.DeserializeObject(str);
             if (info == null)
-                return false;
+                return (UInt16)ErrorCode.ERR_INFO;
 
             SimTime = info["simTime"].Value<double>();
             SimFree = info["free"].Value<bool>();
@@ -505,6 +502,10 @@ namespace DarkNebulaSharp
             if (nodes.ContainsKey(nodeName))
             {
                 ID = nodes[nodeName]["id"].Value<int>();
+            }
+            else
+            {
+                return (UInt16)ErrorCode.ERR_INFO;
             }
 
             var chunks = info["chunks"].Value<JObject>();
@@ -545,7 +546,7 @@ namespace DarkNebulaSharp
                 }
                 else
                 {
-                    return false;
+                    return (UInt16)ErrorCode.ERR_INFO;
                 }
             }
             
@@ -568,6 +569,7 @@ namespace DarkNebulaSharp
                     {
                         recordFileStream.Close();
                         recordFileStream.Dispose();
+                        return (UInt16) ErrorCode.ERR_FILE_READ;
                     }
                 }
                 else if (ReplayState == (int) ReplayStates.Recording)
@@ -575,6 +577,7 @@ namespace DarkNebulaSharp
                     recordFileStream = new FileStream(filename, FileMode.Create);
                     recordFileStream.Write(Utils.StructureToByte(DNVars.RECORD_FILE_MAGIC), 0, sizeof(uint));
                     recordFileStream.FlushAsync();
+                    return (UInt16)ErrorCode.ERR_FILE_WRITE;
                 }
             }
             catch (IOException)
@@ -582,7 +585,7 @@ namespace DarkNebulaSharp
                 ReplayState = (int)ReplayStates.ReplayNop;
                 recordFileStream?.Dispose();
                 recordFileStream = null;
-                return false;
+                return (UInt16)ErrorCode.ERR_FILE_WRITE;
             }
 
             var t0 = System.DateTime.Now;
@@ -597,7 +600,7 @@ namespace DarkNebulaSharp
                 Thread.Sleep(1);
             }
 
-            return ok;
+            return (UInt16) (ok?ErrorCode.ERR_NOP:ErrorCode.ERR_SOCKET);
         }
 
         // 发送一个数据块

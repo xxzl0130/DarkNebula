@@ -27,6 +27,8 @@ namespace dn
 		bool init = false;
 		// 慢速节点，即不保证跟随每一步仿真
 		bool slow = false;
+		// 错误码
+		uint16_t errorCode = ERR_NOP;
 		// 包含的数据块
 		std::vector<NodeChunks> chunks;
 	};

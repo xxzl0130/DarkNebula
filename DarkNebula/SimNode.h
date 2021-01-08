@@ -98,7 +98,7 @@ namespace dn
 		// 处理管理节点指令
 		void processAdminCommand();
 		// 处理初始化信息
-		bool init();
+		uint16_t init();
 		// 发送一个数据块
 		void sendChunk(Chunk& chunk);
 		// 发布自己所有要发布的数据块

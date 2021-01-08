@@ -34,6 +34,15 @@ namespace DarkNebulaSharp
         COMMAND_STOP,               // 结束
     };
 
+    public enum ErrorCode : UInt16
+    {
+        ERR_NOP = 0,        // 无错误
+        ERR_SOCKET,             // socket错误
+        ERR_FILE_READ,          // 文件读取失败
+        ERR_FILE_WRITE,         // 文件写入失败
+        ERR_INFO,				// 信息不足
+    }
+
     [StructLayout(LayoutKind.Sequential)]
     public struct CommandHeader
     {
