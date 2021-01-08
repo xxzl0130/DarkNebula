@@ -9,6 +9,10 @@
 #include "SettingDialog.h"
 #include "DarkNebula/AdminNode.h"
 
+namespace dn {
+	struct Chunk;
+}
+
 class MainWindow : public QMainWindow
 {
     Q_OBJECT
@@ -43,7 +47,7 @@ private:
 	// 创建Chunk列表
     QList<QTreeWidgetItem*> createChunkList(UINT nodeId) const;
 	// 创建Chunk节点
-    QTreeWidgetItem* createChunk(const std::pair<UINT, bool> chunk) const;
+    QTreeWidgetItem* createChunk(const dn::NodeChunks& chunk) const;
 
 private slots:
 	// 搜索节点

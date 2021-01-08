@@ -47,7 +47,7 @@ void MainWindow::setFreeSim(bool free)
 {
 	this->adminNode_->setFreeSim(free);
 	this->ui->simTypeLineEdit->setText(
-		free ? QString(u8"自由仿真") : QString(u8"仿真%1秒").arg(this->adminNode_->getSimTime()));
+		free ? QString(u8"自由仿真") : QString(u8"仿真%1秒").arg(this->adminNode_->getSimEndTime()));
 	settings_->setValue(IniFreeSim, free);
 }
 
@@ -168,7 +168,7 @@ void MainWindow::connect()
 void MainWindow::initNodeTree()
 {
 	QStringList header;
-	header << u8"节点" << u8"IP" << u8"端口" << u8"初始化" << u8"步数" << u8"读写";
+	header << u8"节点" << u8"IP" << u8"初始化" << u8"步数" << u8"读写";
 	this->ui->nodeTree->clear();
 	this->ui->nodeTree->setHeaderLabels(header);
 	this->ui->nodeTree->header()->setSectionResizeMode(0,QHeaderView::Stretch);
@@ -176,7 +176,6 @@ void MainWindow::initNodeTree()
 	this->ui->nodeTree->header()->setSectionResizeMode(2,QHeaderView::ResizeToContents);
 	this->ui->nodeTree->header()->setSectionResizeMode(3,QHeaderView::ResizeToContents);
 	this->ui->nodeTree->header()->setSectionResizeMode(4,QHeaderView::ResizeToContents);
-	this->ui->nodeTree->header()->setSectionResizeMode(5,QHeaderView::ResizeToContents);
 }
 
 void MainWindow::updateNodeTree()
@@ -213,13 +212,12 @@ void MainWindow::initAdminNode()
 QTreeWidgetItem* MainWindow::createNode(UINT id) const
 {
 	QStringList data;
-	//TODO
-	//data << QString::fromLocal8Bit(this->adminNode_->GetNodeNameFromID(id).c_str())
-	//	<< QString::fromLocal8Bit(this->adminNode_->GetNodeIPFromID(id).c_str())
-	//	<< QString::number(this->adminNode_->GetNodePortFromID(id))
-	//	<< QString(this->adminNode_->GetNodeInitOver(id) ? u8"√" : "")
-	//	<< QString::number(this->adminNode_->GetSimNumFromID(id))
-	//	<< "";
+	const auto& node = this->adminNode_->getNodeList()[id];
+	data << QString::fromUtf8(node.name.c_str())
+		<< QString::fromUtf8(node.ip.c_str())
+		<< QString(node.init ? u8"√" : "")
+		<< QString::number(node.steps)
+		<< "";
 	auto* item = new QTreeWidgetItem(data);
 	item->setIcon(0, nodeIcon_);
 	item->setFlags(Qt::ItemIsSelectable | Qt::ItemIsEnabled);
@@ -229,21 +227,23 @@ QTreeWidgetItem* MainWindow::createNode(UINT id) const
 QList<QTreeWidgetItem*> MainWindow::createChunkList(UINT nodeId) const
 {
 	QList<QTreeWidgetItem*> list;
-	//TODO
+	for(const auto& it : this->adminNode_->getNodeList()[nodeId].chunks)
+	{
+		list.append(createChunk(it));
+	}
 	return list;
 }
 
-QTreeWidgetItem* MainWindow::createChunk(const std::pair<UINT, bool> chunk) const
+QTreeWidgetItem* MainWindow::createChunk(const dn::NodeChunks& chunk) const
 {
-	QStringList dsmData;
-	auto id = chunk.first;
-	auto own = chunk.second;
-	dsmData << QString::fromLocal8Bit(this->adminNode_->getChunkList()[id].first.c_str())
-		<< "" << "" << "" << "" << QString(own ? u8"写" : u8"读");
-	auto* dsmItem = new QTreeWidgetItem(dsmData);
-	dsmItem->setIcon(0, dataIcon_);
-	dsmItem->setFlags(Qt::ItemIsSelectable | Qt::ItemIsEnabled);
-	return dsmItem;
+	QStringList data;
+	const auto& chunkInfo = this->adminNode_->getChunkList()[chunk.first];
+	data << QString::fromUtf8(chunkInfo.first.c_str()) << QString::fromUtf8(chunkInfo.second.c_str())
+		<< "" << "" << QString(chunk.second ? u8"写" : u8"读");
+	auto* item = new QTreeWidgetItem(data);
+	item->setIcon(0, dataIcon_);
+	item->setFlags(Qt::ItemIsSelectable | Qt::ItemIsEnabled);
+	return item;
 }
 
 void MainWindow::searchNodes()
@@ -401,5 +401,5 @@ void MainWindow::nodeAdvanceCallback(int node)
 	if (item == nullptr)
 		return;
 	auto step = this->adminNode_->getNodeList()[node].steps;
-	item->setData(4, Qt::DisplayRole, QString::number(step));
+	item->setData(3, Qt::DisplayRole, QString::number(step));
 }
