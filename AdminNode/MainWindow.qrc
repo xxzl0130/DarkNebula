@@ -1,0 +1,15 @@
+<RCC>
+    <qresource prefix="/MainWindow">
+        <file>Resource/close.png</file>
+        <file>Resource/pause.png</file>
+        <file>Resource/search.png</file>
+        <file>Resource/set.png</file>
+        <file>Resource/speeddown.png</file>
+        <file>Resource/speedup.png</file>
+        <file>Resource/start.png</file>
+        <file>Resource/stop.png</file>
+        <file>Resource/init.png</file>
+        <file>Resource/data.png</file>
+        <file>Resource/node.png</file>
+    </qresource>
+</RCC>
