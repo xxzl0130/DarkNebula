@@ -25,38 +25,38 @@ MainWindow::~MainWindow()
 
 void MainWindow::setSimStep(unsigned step)
 {
-	this->adminNode_->SetSimStep(step);
+	this->adminNode_->setStepTime(step);
 	this->ui->simStepLineEdit->setText(QString::number(step) + "ms");
 	settings_->setValue(IniSimStep, step);
 }
 
 void MainWindow::setSimTime(unsigned time)
 {
-	this->adminNode_->SetSimEndTime(time);
+	this->adminNode_->setSimEndTime(time);
 	settings_->setValue(IniSimTime, time);
 }
 
 void MainWindow::setSimSpeed(unsigned speed)
 {
-	this->adminNode_->SetSimSpeed(speed);
+	this->adminNode_->setSimSpeed(speed / 100.0);
 	this->ui->simSpeedLineEdit->setText(QString::number(speed) + "%");
 	settings_->setValue(IniSimSpeed, speed);
 }
 
 void MainWindow::setFreeSim(bool free)
 {
-	this->adminNode_->SetFreeSim(free);
+	this->adminNode_->setFreeSim(free);
 	this->ui->simTypeLineEdit->setText(
-		free ? QString(u8"自由仿真") : QString(u8"仿真%1秒").arg(this->adminNode_->GetSimEndTime()));
+		free ? QString(u8"自由仿真") : QString(u8"仿真%1秒").arg(this->adminNode_->getSimTime()));
 	settings_->setValue(IniFreeSim, free);
 }
 
-void MainWindow::setPort(unsigned admin, unsigned node)
+void MainWindow::setPort(unsigned recv, unsigned send)
 {
-	adminNode_->SetAdminNodeReceivePort(admin);
-	adminNode_->SetSimNodeReceivePort(node);
-	settings_->setValue(IniAdminPort, admin);
-	settings_->setValue(IniNodePort, node);
+	adminNode_->setReceivePort(recv);
+	adminNode_->setSendPort(send);
+	settings_->setValue(IniAdminRecvPort, recv);
+	settings_->setValue(IniAdminSendPort, send);
 }
 
 void MainWindow::connect()
@@ -78,12 +78,6 @@ void MainWindow::connect()
 		&MainWindow::nodeInitOver,
 		this,
 		&MainWindow::nodeInitOverCallback
-	);
-	QObject::connect(
-		this,
-		&MainWindow::onAdvance,
-		this,
-		&MainWindow::onAdvanceCallback
 	);
 	QObject::connect(
 		this->ui->initAction,
@@ -188,12 +182,12 @@ void MainWindow::initNodeTree()
 void MainWindow::updateNodeTree()
 {
 	this->initNodeTree();
-	auto n = this->adminNode_->GetNodeCount();
+	auto n = this->adminNode_->getNodeCount();
 	for(auto i = 0;i < n;++i)
 	{
 		auto* node = createNode(i);
 		this->ui->nodeTree->addTopLevelItem(node);
-		node->addChildren(createDSMList(i));
+		node->addChildren(createChunkList(i));
 	}
 	this->ui->nodeTree->expandAll();
 }
@@ -203,52 +197,48 @@ void MainWindow::initAdminNode()
 	if(adminNode_ == nullptr)
 	{
 		adminNode_ = new dn::AdminNode(
-			settings_->value(IniAdminPort, IniAdminPortDefault).toUInt(),
-			settings_->value(IniNodePort, IniNodePortDefault).toUInt());
+			settings_->value(IniAdminRecvPort, IniAdminRecvPortDefault).toUInt(),
+			settings_->value(IniAdminSendPort, IniAdminSendPort).toUInt());
 	}
 	setSimStep(settings_->value(IniSimStep, IniSimStepDefault).toUInt());
 	setSimTime(settings_->value(IniSimTime, IniSimTimeDefault).toUInt());
 	setSimSpeed(settings_->value(IniSimSpeed, IniSimSpeedDefault).toUInt());
 	setFreeSim(settings_->value(IniFreeSim, IniFreeSimDefault).toBool());
-	this->adminNode_->SetOnRegister([&](unsigned id) {emit nodeRegister(id); });
-	this->adminNode_->SetOnNodeAdvance([&](unsigned id) {emit nodeAdvance(id); });
-	this->adminNode_->SetOnInitOver([&](unsigned id) {emit nodeInitOver(id); });
-	this->adminNode_->SetOnAdvance([&](unsigned time) {emit onAdvance(time); });
+	this->adminNode_->setRegisterCallback([&](unsigned id) {emit nodeRegister(id); });
+	this->adminNode_->setAdvanceCallback([&](unsigned id) {emit nodeAdvance(id); });
+	this->adminNode_->setInitOverCallback([&](unsigned id) {emit nodeInitOver(id); });
 	updateNodeTree();
 }
 
 QTreeWidgetItem* MainWindow::createNode(UINT id) const
 {
 	QStringList data;
-	data << QString::fromLocal8Bit(this->adminNode_->GetNodeNameFromID(id).c_str())
-		<< QString::fromLocal8Bit(this->adminNode_->GetNodeIPFromID(id).c_str())
-		<< QString::number(this->adminNode_->GetNodePortFromID(id))
-		<< QString(this->adminNode_->GetNodeInitOver(id) ? u8"√" : "")
-		<< QString::number(this->adminNode_->GetSimNumFromID(id))
-		<< "";
+	//TODO
+	//data << QString::fromLocal8Bit(this->adminNode_->GetNodeNameFromID(id).c_str())
+	//	<< QString::fromLocal8Bit(this->adminNode_->GetNodeIPFromID(id).c_str())
+	//	<< QString::number(this->adminNode_->GetNodePortFromID(id))
+	//	<< QString(this->adminNode_->GetNodeInitOver(id) ? u8"√" : "")
+	//	<< QString::number(this->adminNode_->GetSimNumFromID(id))
+	//	<< "";
 	auto* item = new QTreeWidgetItem(data);
 	item->setIcon(0, nodeIcon_);
 	item->setFlags(Qt::ItemIsSelectable | Qt::ItemIsEnabled);
 	return item;
 }
 
-QList<QTreeWidgetItem*> MainWindow::createDSMList(UINT nodeId) const
+QList<QTreeWidgetItem*> MainWindow::createChunkList(UINT nodeId) const
 {
 	QList<QTreeWidgetItem*> list;
-	const auto& dsmSet = this->adminNode_->GetDsmSetFromID(nodeId);
-	for (const auto& dsm : dsmSet)
-	{
-		list.append(createDSM(dsm));
-	}
+	//TODO
 	return list;
 }
 
-QTreeWidgetItem* MainWindow::createDSM(const std::pair<UINT, bool> dsm) const
+QTreeWidgetItem* MainWindow::createChunk(const std::pair<UINT, bool> chunk) const
 {
 	QStringList dsmData;
-	auto id = dsm.first;
-	auto own = dsm.second;
-	dsmData << QString::fromLocal8Bit(this->adminNode_->GetDsmNameFromID(id).c_str())
+	auto id = chunk.first;
+	auto own = chunk.second;
+	dsmData << QString::fromLocal8Bit(this->adminNode_->getChunkList()[id].first.c_str())
 		<< "" << "" << "" << "" << QString(own ? u8"写" : u8"读");
 	auto* dsmItem = new QTreeWidgetItem(dsmData);
 	dsmItem->setIcon(0, dataIcon_);
@@ -258,43 +248,43 @@ QTreeWidgetItem* MainWindow::createDSM(const std::pair<UINT, bool> dsm) const
 
 void MainWindow::searchNodes()
 {
-	if(adminNode_->GetSimState() == SimRun || adminNode_->GetSimState() == SimPause)
+	if(adminNode_->getSimState() == dn::SimRun || adminNode_->getSimState() == dn::SimPause)
 	{
 		QMessageBox::warning(this, u8"错误", u8"仿真运行中不可搜索节点！");
 		return;
 	}
-	this->adminNode_->SearchNode();
+	this->adminNode_->searchNode();
 	this->ui->simStateLineEdit->setText(u8"搜索节点");
 }
 
 void MainWindow::initNodes()
 {
-	if (adminNode_->GetSimState() == SimRun || adminNode_->GetSimState() == SimPause)
+	if (adminNode_->getSimState() == dn::SimRun || adminNode_->getSimState() == dn::SimPause)
 	{
 		QMessageBox::warning(this, u8"错误", u8"仿真运行中不可初始化节点！");
 		return;
 	}
-	this->adminNode_->SimInit();
+	this->adminNode_->initSim();
 	this->ui->simStateLineEdit->setText(u8"初始化中");
 }
 
 void MainWindow::startSim()
 {
-	if (adminNode_->GetSimState() != SimInit && adminNode_->GetSimState() != SimPause)
+	if (adminNode_->getSimState() != dn::SimInit && adminNode_->getSimState() != dn::SimPause)
 	{
 		QMessageBox::warning(this, u8"错误", u8"请先初始化节点或暂停仿真！");
 		return;
 	}
-	this->adminNode_->SimRun();
+	this->adminNode_->startSim();
 	this->ui->simStateLineEdit->setText(u8"运行中");
-	if(this->adminNode_->IsFreeSim())
+	if(this->adminNode_->isFreeSim())
 	{
 		this->ui->progressBar->setMinimum(0);
 		this->ui->progressBar->setMaximum(0);
 	}
 	else
 	{
-		this->ui->progressBar->setMaximum(this->adminNode_->GetSimEndTime() * 1000);
+		this->ui->progressBar->setMaximum(this->adminNode_->getSimEndTime() * 1000);
 		this->ui->progressBar->setMinimum(0);
 		this->ui->progressBar->setValue(0);
 	}
@@ -303,14 +293,14 @@ void MainWindow::startSim()
 
 void MainWindow::pauseSim()
 {
-	if (adminNode_->GetSimState() != SimRun && adminNode_->GetSimState() != SimPause)
+	if (adminNode_->getSimState() != dn::SimRun && adminNode_->getSimState() != dn::SimPause)
 	{
 		QMessageBox::warning(this, u8"错误", u8"请先运行仿真！");
 		return;
 	}
-	this->adminNode_->SimPause();
+	this->adminNode_->pauseSim();
 	this->ui->simStateLineEdit->setText(u8"暂停中");
-	if (this->adminNode_->IsFreeSim())
+	if (this->adminNode_->isFreeSim())
 	{
 		this->ui->progressBar->setMaximum(0);
 		this->ui->progressBar->setMinimum(0);
@@ -320,12 +310,12 @@ void MainWindow::pauseSim()
 
 void MainWindow::stopSim()
 {
-	if (adminNode_->GetSimState() != SimRun && adminNode_->GetSimState() != SimPause && adminNode_->GetSimState() != SimStop)
+	if (adminNode_->getSimState() != dn::SimRun && adminNode_->getSimState() != dn::SimPause && adminNode_->getSimState() != dn::SimStop)
 	{
 		QMessageBox::warning(this, u8"错误", u8"请先运行仿真！");
 		return;
 	}
-	this->adminNode_->SimStop();
+	this->adminNode_->stopSim();
 	this->ui->simStateLineEdit->setText(u8"停止");
 
 	this->ui->progressBar->setMaximum(100);
@@ -336,26 +326,26 @@ void MainWindow::stopSim()
 
 void MainWindow::speedUpSim()
 {
-	this->adminNode_->SimSpeedUp();
-	this->ui->simSpeedLineEdit->setText(QString::number(this->adminNode_->GetSimSpeed()) + "%");
+	this->adminNode_->speedUp();
+	this->ui->simSpeedLineEdit->setText(QString::number(this->adminNode_->getSimSpeed() * 100.0) + "%");
 }
 
 void MainWindow::speedDownSim()
 {
-	this->adminNode_->SimSlowDown();
-	this->ui->simSpeedLineEdit->setText(QString::number(this->adminNode_->GetSimSpeed()) + "%");
+	this->adminNode_->speedDown();
+	this->ui->simSpeedLineEdit->setText(QString::number(this->adminNode_->getSimSpeed() * 100.0) + "%");
 }
 
-void MainWindow::nodeRegisterCallback(unsigned node)
+void MainWindow::nodeRegisterCallback(int node)
 {
 	updateNodeTree();
 }
 
-void MainWindow::nodeInitOverCallback(unsigned node)
+void MainWindow::nodeInitOverCallback(int node)
 {
-	if(node == (UINT)-1)
+	if(node == dn::ALL_NODE)
 	{
-		for(auto i = 0;i < this->adminNode_->GetNodeCount();++i)
+		for(auto i = 0;i < this->adminNode_->getNodeCount();++i)
 		{
 			this->nodeInitOver(i);
 		}
@@ -366,52 +356,50 @@ void MainWindow::nodeInitOverCallback(unsigned node)
 	item->setData(3, Qt::DisplayRole, u8"√");
 }
 
-void MainWindow::nodeAdvanceCallback(unsigned node)
+void MainWindow::nodeAdvanceCallback(int node)
 {
-	if (node == (UINT)-1)
+	static size_t cnt = 0;
+	if (node == dn::ALL_NODE)
 	{
-		for (auto i = 0; i < this->adminNode_->GetNodeCount(); ++i)
+		for (auto i = 0; i < this->adminNode_->getNodeCount(); ++i)
 		{
 			this->nodeAdvanceCallback(i);
 		}
+		unsigned time = adminNode_->getSimTime() * 1000.0;
+		this->simTimeAvgQueue_.push(std::make_pair(time, unsigned(double(clock()) / CLOCKS_PER_SEC * 1000)));
+		while (simTimeAvgQueue_.size() > 50)
+		{
+			simTimeAvgQueue_.pop();
+		}
+		if (!adminNode_->isFreeSim())
+		{
+			this->ui->progressBar->setValue(time);
+		}
+		if (cnt % 10 == 0)
+		{
+			auto t0 = this->simTimeAvgQueue_.front();
+			auto t1 = this->simTimeAvgQueue_.back();
+			this->ui->simTrueSpeedLineEdit->setText(QString::number((t1.first - t0.first) / double(t1.second - t0.second) * 100) + "%");
+			this->ui->simStateLineEdit->setText(u8"运行中");
+		}
+		auto fff = time % 1000;
+		auto ss = (time / 1000) % 60;
+		auto mm = (time / 1000 / 60) % 60;
+		auto hh = time / 1000 / 60 / 60;
+		this->ui->simTimeLineEdit->setText(QString("%1:%2:%3.%4").arg(hh, 2, 10, QChar::fromLatin1('0'))
+			.arg(mm, 2, 10, QChar::fromLatin1('0'))
+			.arg(ss, 2, 10, QChar::fromLatin1('0'))
+			.arg(fff, 3, 10, QChar::fromLatin1('0')));
+		++cnt;
+		if (adminNode_->getSimState() == dn::SimStop)
+		{
+			this->stopSim();
+		}
+		return;
 	}
 	auto* item = this->ui->nodeTree->topLevelItem(node);
 	if (item == nullptr)
 		return;
-	auto step = this->adminNode_->GetSimNumFromID(node);
+	auto step = this->adminNode_->getNodeList()[node].steps;
 	item->setData(4, Qt::DisplayRole, QString::number(step));
-}
-
-void MainWindow::onAdvanceCallback(unsigned time)
-{
-	static size_t cnt = 0;
-	this->simTimeAvgQueue_.push(std::make_pair(time, unsigned(double(clock()) / CLOCKS_PER_SEC * 1000)));
-	while(simTimeAvgQueue_.size() > 50)
-	{
-		simTimeAvgQueue_.pop();
-	}
-	if (!adminNode_->IsFreeSim())
-	{
-		this->ui->progressBar->setValue(time);
-	}
-	if(cnt % 10 == 0)
-	{
-		auto t0 = this->simTimeAvgQueue_.front();
-		auto t1 = this->simTimeAvgQueue_.back();
-		this->ui->simTrueSpeedLineEdit->setText(QString::number((t1.first - t0.first) / double(t1.second - t0.second) * 100) + "%");
-		this->ui->simStateLineEdit->setText(u8"运行中");
-	}
-	auto fff = time % 1000;
-	auto ss = (time / 1000) % 60;
-	auto mm = (time / 1000 / 60) % 60;
-	auto hh = time / 1000 / 60 / 60;
-	this->ui->simTimeLineEdit->setText(QString("%1:%2:%3.%4").arg(hh, 2, 10, QChar::fromLatin1('0'))
-		.arg(mm, 2, 10, QChar::fromLatin1('0'))
-		.arg(ss, 2, 10, QChar::fromLatin1('0'))
-		.arg(fff, 3, 10, QChar::fromLatin1('0')));
-	++cnt;
-	if(adminNode_->GetSimState() == SimStop)
-	{
-		this->stopSim();
-	}
 }

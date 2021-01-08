@@ -121,11 +121,16 @@ void dn::AdminNode::setFreeSim(bool en)
 	simFree_ = en;
 }
 
-void dn::AdminNode::setSimTime(double time)
+void dn::AdminNode::setSimEndTime(double time)
 {
 	if (simState_ > SimStop)
 		return;
 	simTime_ = time;
+}
+
+double dn::AdminNode::getSimEndTime() const
+{
+	return simTime_;
 }
 
 void dn::AdminNode::setStepTime(unsigned ms)
@@ -170,6 +175,21 @@ void dn::AdminNode::setSimSpeed(double speed)
 	if(speed <= 0.0)
 		return;
 	simSpeed_ = speed;
+}
+
+double dn::AdminNode::getSimSpeed() const
+{
+	return simSpeed_;
+}
+
+void dn::AdminNode::speedUp()
+{
+	setSimSpeed(simSpeed_ + 0.05);
+}
+
+void dn::AdminNode::speedDown()
+{
+	setSimSpeed(simSpeed_ - 0.05);
 }
 
 void dn::AdminNode::initSim()
@@ -273,6 +293,13 @@ void dn::AdminNode::stepBackward()
 	curTime_ = static_cast<double>(simSteps_) * stepTime_ / 1000.0;
 	sendCommand(ALL_NODE, COMMAND_STEP_BACKWARD, sizeof curTime_, &curTime_);
 	simState_ = SimStep;
+}
+
+void dn::AdminNode::searchNode()
+{
+	if (simState_ > SimStop)
+		return;
+	sendCommand(ALL_NODE, COMMAND_REG);
 }
 
 void dn::AdminNode::setInitOverCallback(AdminCallback callback)

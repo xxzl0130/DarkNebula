@@ -423,6 +423,9 @@ void dn::SimNode::processAdminCommand()
 		if (stopCallback_)
 			stopCallback_();
 		break;
+	case COMMAND_REG:
+		regIn();
+		break;
 	default:
 		break;
 	}

@@ -38,7 +38,7 @@ SettingDialog::~SettingDialog()
 
 void SettingDialog::accept()
 {
-	if(this->ui->adminPortSpinBox->value() == this->ui->nodePortSpinBox->value())
+	if(this->ui->recvPortSpinBox->value() == this->ui->sendPortSpinBox->value())
 	{
 		QMessageBox::warning(this, u8"错误端口", u8"端口号不能相同！");
 		reject();
@@ -51,7 +51,7 @@ void SettingDialog::accept()
 	}
 	emit sendFreeSim(this->ui->freeCheckBox->isChecked());
 	emit sendSimStep(this->ui->simStepSpinBox->value());
-	emit sendPort(this->ui->adminPortSpinBox->value(), this->ui->nodePortSpinBox->value());
+	emit sendPort(this->ui->recvPortSpinBox->value(), this->ui->sendPortSpinBox->value());
 	QDialog::accept();
 }
 
@@ -66,7 +66,7 @@ void SettingDialog::open()
 	this->ui->simSpeedSpinBox->setValue(settings_->value(IniSimSpeed, IniSimSpeedDefault).toUInt());
 	this->ui->simTimeSpinBox->setValue(settings_->value(IniSimTime, IniSimTimeDefault).toUInt());
 	this->ui->freeCheckBox->setChecked(settings_->value(IniFreeSim, IniFreeSimDefault).toBool());
-	this->ui->adminPortSpinBox->setValue(settings_->value(IniAdminPort, IniAdminPortDefault).toUInt());
-	this->ui->nodePortSpinBox->setValue(settings_->value(IniNodePort, IniNodePortDefault).toUInt());
+	this->ui->recvPortSpinBox->setValue(settings_->value(IniAdminRecvPort, IniAdminRecvPortDefault).toUInt());
+	this->ui->sendPortSpinBox->setValue(settings_->value(IniAdminSendPort, IniAdminSendPortDefault).toUInt());
 	QDialog::open();
 }

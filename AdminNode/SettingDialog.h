@@ -22,7 +22,7 @@ signals:
 	void sendSimTime(unsigned time);
 	void sendSimSpeed(unsigned speed);
 	void sendFreeSim(bool free);
-	void sendPort(unsigned admin, unsigned node);
+	void sendPort(unsigned recv, unsigned send);
 
 private:
 	Ui::SettingDialog *ui;

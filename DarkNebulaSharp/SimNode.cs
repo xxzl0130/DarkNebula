@@ -481,6 +481,9 @@ namespace DarkNebulaSharp
                     recordFileStream?.Close();
                     stopCallback?.Invoke();
                     break;
+                case CommandCode.COMMAND_REG:
+                    RegIn();
+                    break;
             }
         }
 

@@ -75,7 +75,9 @@ namespace dn
 		// 设置是否为自由仿真
 		void setFreeSim(bool en);
 		// 设置仿真时长，小于0为自由仿真，回放模式时长不能大于录制文件
-		void setSimTime(double time);
+		void setSimEndTime(double time);
+		// 获取仿真时长
+		double getSimEndTime() const;
 		// 设置仿真步长
 		void setStepTime(unsigned ms);
 		// 设置启用录制，启用时需要提供保存的记录名，与回放互斥，取消时不会自动启用回放
@@ -88,6 +90,12 @@ namespace dn
 		void setReplay(bool enable, const std::string& name = "");
 		// 设置仿真速度，实时为1
 		void setSimSpeed(double speed = 1);
+		// 获取仿真速度
+		double getSimSpeed() const;
+		// 提高速度
+		void speedUp();
+		// 降低速度
+		void speedDown();
 
 		/// 仿真命令
 		// 初始化仿真
@@ -102,6 +110,8 @@ namespace dn
 		void stepForward();
 		// 手动单步后退
 		void stepBackward();
+		// 搜索节点
+		void searchNode();
 
 		/// 回调函数
 		// 初始化完成
