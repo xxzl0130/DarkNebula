@@ -18,6 +18,8 @@ Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "AdminNode", "AdminNode\Admi
 		{E5ECA4BD-9432-473C-9CE6-BA4A22969784} = {E5ECA4BD-9432-473C-9CE6-BA4A22969784}
 	EndProjectSection
 EndProject
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "SimNodeCpp", "SimNodeCpp\SimNodeCpp.vcxproj", "{21757948-81BA-4D95-B03C-3551F8AE94D2}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -52,6 +54,12 @@ Global
 		{84AA57EE-1566-4BC9-B1C5-FF5AD59652FD}.Release|Any CPU.ActiveCfg = Release|x64
 		{84AA57EE-1566-4BC9-B1C5-FF5AD59652FD}.Release|x64.ActiveCfg = Release|x64
 		{84AA57EE-1566-4BC9-B1C5-FF5AD59652FD}.Release|x64.Build.0 = Release|x64
+		{21757948-81BA-4D95-B03C-3551F8AE94D2}.Debug|Any CPU.ActiveCfg = Debug|x64
+		{21757948-81BA-4D95-B03C-3551F8AE94D2}.Debug|x64.ActiveCfg = Debug|x64
+		{21757948-81BA-4D95-B03C-3551F8AE94D2}.Debug|x64.Build.0 = Debug|x64
+		{21757948-81BA-4D95-B03C-3551F8AE94D2}.Release|Any CPU.ActiveCfg = Release|x64
+		{21757948-81BA-4D95-B03C-3551F8AE94D2}.Release|x64.ActiveCfg = Release|x64
+		{21757948-81BA-4D95-B03C-3551F8AE94D2}.Release|x64.Build.0 = Release|x64
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE

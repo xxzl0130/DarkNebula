@@ -5,11 +5,6 @@
 
 namespace dn
 {
-	// 仿真指令回调函数
-	typedef std::function<void(void)> SimEventCallback;
-	// 仿真推进回调函数
-	typedef std::function<void(uint32_t,double)> SimStepCallback;
-
 	struct Chunk;
 	
 	class DN_EXPORT SimNode : public Node
@@ -44,6 +39,13 @@ namespace dn
 		void setAdminRecvPort(uint16_t port);
 		// 管理节点发送指令的端口
 		void setAdminSendPort(uint16_t port);
+		// 设置记录回放数据保存文件夹
+		void setRecordDataFolder(const std::string& folder);
+
+		// 注册，之后无法修改参数
+		bool regIn();
+
+	protected:
 		/**
 		 * \brief 添加数据块
 		 * \tparam T 数据块类型
@@ -52,7 +54,7 @@ namespace dn
 		 * \param write 是否拥有该数据块写入权限
 		 */
 		template <typename T>
-		void addChunk(const std::string& name,T& data,bool write)
+		void addChunk(const std::string& name, T& data, bool write)
 		{
 			addChunk(name, &data, sizeof T, write);
 		}
@@ -64,27 +66,22 @@ namespace dn
 		 * \param write 是否拥有该数据块写入权限
 		 */
 		void addChunk(const std::string& name, void* pData, size_t size, bool write);
-		// 设置记录回放数据保存文件夹
-		void setRecordDataFolder(const std::string& folder);
-
-		// 注册，之后无法修改参数
-		bool regIn();
-
-		/// 回调函数设置，注意回调函数均运行在子线程
-		// 仿真初始化回调函数
-		void setInitCallback(SimEventCallback callback);
-		// 仿真开始回调函数，可不设置
-		void setStartCallback(SimEventCallback callback);
-		// 仿真暂停回调函数，可不设置
-		void setPauseCallback(SimEventCallback callback);
-		// 仿真停止回调函数，可不设置
-		void setStopCallback(SimEventCallback callback);
-		// 仿真推进函数
-		void setSimStepCallback(SimStepCallback callback);
-		// 回放模式后退一步的回调函数，可以不设置，则使用推进函数
-		void setSimStepBackCallback(SimStepCallback callback);
-		// 回放推进函数，不设置时遇到回放将调用普通仿真函数
-		void setReplayStepCallback(SimStepCallback callback);
+		
+		/// 仿真过程中的相关函数，均运行在子线程
+		// 仿真初始化回调函数，必须实现
+		virtual void simInitFunc() = 0;
+		// 仿真开始函数，可不实现
+		virtual void simStartFunc(){}
+		// 仿真暂停函数，可不实现
+		virtual void simPauseFunc(){}
+		// 仿真停止函数，可不实现
+		virtual void simStopFunc(){}
+		// 仿真推进函数，必须实现
+		virtual void simStepFunc(uint32_t steps, double time) = 0;
+		// 回放模式后退一步的函数，可以不实现，则使用推进函数
+		virtual void replayStepBackFunc(uint32_t steps, double time) { simStepFunc(steps, time); }
+		// 回放推进函数，不实现时遇到回放将调用普通仿真函数
+		virtual void replayStepFunc(uint32_t steps, double time) { simStepFunc(steps, time); }
 
 	private:		
 		// 运行线程
@@ -113,9 +110,6 @@ namespace dn
 		void copyOwnChunks();
 
 	private:
-		SimEventCallback initCallback_, startCallback_, pauseCallback_, stopCallback_;
-		SimStepCallback simStepCallback_, replayStepCallback_, replayStepBackCallback_;
-
 		// 节点名称
 		std::string nodeName_;
 		// 节点IP
@@ -132,7 +126,7 @@ namespace dn
 		bool slowNode_;
 		// 运行中
 		bool running_;
-		
+
 		// 监听列表
 		std::vector<zmq_pollitem_t> pollitems_;
 		// 数据块列表

@@ -129,41 +129,6 @@ bool dn::SimNode::regIn()
 	return true;
 }
 
-void dn::SimNode::setInitCallback(SimEventCallback callback)
-{
-	initCallback_ = std::move(callback);
-}
-
-void dn::SimNode::setStartCallback(SimEventCallback callback)
-{
-	startCallback_ = std::move(callback);
-}
-
-void dn::SimNode::setPauseCallback(SimEventCallback callback)
-{
-	pauseCallback_ = std::move(callback);
-}
-
-void dn::SimNode::setStopCallback(SimEventCallback callback)
-{
-	stopCallback_ = std::move(callback);
-}
-
-void dn::SimNode::setSimStepCallback(SimStepCallback callback)
-{
-	simStepCallback_ = std::move(callback);
-}
-
-void dn::SimNode::setSimStepBackCallback(SimStepCallback callback)
-{
-	replayStepBackCallback_ = std::move(callback);
-}
-
-void dn::SimNode::setReplayStepCallback(SimStepCallback callback)
-{
-	replayStepCallback_ = std::move(callback);
-}
-
 void dn::SimNode::working()
 {
 	std::unique_lock<std::mutex> lock(workMutex_);
@@ -290,8 +255,7 @@ void dn::SimNode::processAdminCommand()
 			break;
 		}
 		simState_ = SimInit;
-		if (initCallback_)
-			initCallback_();
+		simInitFunc();
 		// 先把初始化的值拷贝到缓存，下一步前会再拷回来，不然会覆盖垃圾值
 		for (auto& it : chunkList_)
 		{
@@ -307,8 +271,7 @@ void dn::SimNode::processAdminCommand()
 		simSteps_ = 0;
 		curTime_ = 0;
 		simState_ = SimRun;
-		if (startCallback_)
-			startCallback_();
+		simStartFunc();
 		break;
 	case COMMAND_STEP_FORWARD:
 		copyNOwnChunks();
@@ -320,10 +283,10 @@ void dn::SimNode::processAdminCommand()
 		simState_ = SimRun;
 		if (!slowNode_)
 		{
-			if (replayState_ == Replaying && replayStepCallback_)
-				replayStepCallback_(simSteps_, curTime_);
-			else if (simStepCallback_)
-				simStepCallback_(simSteps_, curTime_);
+			if (replayState_ == Replaying)
+				replayStepFunc(simSteps_, curTime_);
+			else
+				simStepFunc(simSteps_, curTime_);
 			// 覆盖数据
 			if (replayState_ == Replaying)
 			{
@@ -342,10 +305,10 @@ void dn::SimNode::processAdminCommand()
 					{
 						std::unique_lock<std::mutex> lock(slowMutex_);
 						slowRunning_ = true;
-						if (replayState_ == Replaying && replayStepCallback_)
-							replayStepCallback_(simSteps_, curTime_);
-						else if (simStepCallback_)
-							simStepCallback_(simSteps_, curTime_);
+						if (replayState_ == Replaying)
+							replayStepFunc(simSteps_, curTime_);
+						else
+							simStepFunc(simSteps_, curTime_);
 						++simSteps_;
 						slowRunning_ = false;
 						// 覆盖数据
@@ -370,10 +333,10 @@ void dn::SimNode::processAdminCommand()
 		simState_ = SimRun;
 		if (!slowNode_)
 		{
-			if (replayState_ == Replaying && replayStepBackCallback_)
-				replayStepBackCallback_(simSteps_, curTime_);
-			else if (simStepCallback_)
-				simStepCallback_(simSteps_, curTime_);
+			if (replayState_ == Replaying)
+				replayStepBackFunc(simSteps_, curTime_);
+			else
+				simStepFunc(simSteps_, curTime_);
 			--simSteps_;
 			// 覆盖数据
 			if (replayState_ == Replaying)
@@ -392,10 +355,10 @@ void dn::SimNode::processAdminCommand()
 					{
 						std::unique_lock<std::mutex> lock(slowMutex_);
 						slowRunning_ = true;
-						if (replayState_ == Replaying && replayStepBackCallback_)
-							replayStepBackCallback_(simSteps_, curTime_);
-						else if (simStepCallback_)
-							simStepCallback_(simSteps_, curTime_);
+						if (replayState_ == Replaying)
+							replayStepBackFunc(simSteps_, curTime_);
+						else
+							simStepFunc(simSteps_, curTime_);
 						--simSteps_;
 
 						// 覆盖数据
@@ -413,15 +376,13 @@ void dn::SimNode::processAdminCommand()
 		break;
 	case COMMAND_PAUSE:
 		simState_ = SimPause;
-		if (pauseCallback_)
-			pauseCallback_();
+		simPauseFunc();
 		break;
 	case COMMAND_STOP:
 		simState_ = SimStop;
 		if (recordFile_)
 			fclose(recordFile_);
-		if (stopCallback_)
-			stopCallback_();
+		simStopFunc();
 		break;
 	case COMMAND_REG:
 		regIn();
