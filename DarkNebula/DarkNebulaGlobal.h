@@ -84,8 +84,8 @@ namespace dn
 	constexpr auto COMMAND_TOPIC_LEN = 7;
 	constexpr auto REPLY_TOPIC = "reply";
 	constexpr auto REPLY_TOPIC_LEN = 5;
-	constexpr uint16_t ADMIN_RECEIVE_PORT = 6666;
-	constexpr uint16_t ADMIN_SEND_PORT = 8888;
+	constexpr uint16_t ADMIN_RECEIVE_PORT = 9988;
+	constexpr uint16_t ADMIN_SEND_PORT = 9999;
 	constexpr uint16_t CHUNK_PORT = 10000;
 	constexpr auto RECORD_FILE_SUFFIX = ".dnr";
 	constexpr uint32_t RECORD_FILE_MAGIC = 0x44417A9F;

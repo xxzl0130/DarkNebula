@@ -33,7 +33,7 @@ namespace dn
 }
 
 dn::SimNode::SimNode(const std::string& nodeName, const std::string& nodeIP, uint16_t chunkPort, bool slowNode,
-	const std::string& adminIP, uint16_t adminRecvPort, uint16_t adminSendPort):
+	const std::string& adminIP, uint16_t adminRecvPort, uint16_t adminSendPort) :
 	slowNode_(false),
 	running_(false),
 	id_(-1),
@@ -70,7 +70,7 @@ dn::SimNode::~SimNode()
 
 void dn::SimNode::setNodeName(const std::string& name)
 {
-	if(running_)
+	if (running_)
 		return;
 	nodeName_ = name;
 }
@@ -119,7 +119,7 @@ void dn::SimNode::setAdminSendPort(uint16_t port)
 
 bool dn::SimNode::regIn()
 {
-	if(running_)
+	if (running_)
 		return true;
 	initSocket();
 	if (!sendReg())
@@ -127,6 +127,41 @@ bool dn::SimNode::regIn()
 	startWorking();
 	running_ = true;
 	return true;
+}
+
+void dn::SimNode::setInitCallback(SimEventCallback callback)
+{
+	initCallback_ = std::move(callback);
+}
+
+void dn::SimNode::setStartCallback(SimEventCallback callback)
+{
+	startCallback_ = std::move(callback);
+}
+
+void dn::SimNode::setPauseCallback(SimEventCallback callback)
+{
+	pauseCallback_ = std::move(callback);
+}
+
+void dn::SimNode::setStopCallback(SimEventCallback callback)
+{
+	stopCallback_ = std::move(callback);
+}
+
+void dn::SimNode::setSimStepCallback(SimStepCallback callback)
+{
+	simStepCallback_ = std::move(callback);
+}
+
+void dn::SimNode::setSimStepBackCallback(SimStepCallback callback)
+{
+	replayStepBackCallback_ = std::move(callback);
+}
+
+void dn::SimNode::setReplayStepCallback(SimStepCallback callback)
+{
+	replayStepCallback_ = std::move(callback);
 }
 
 void dn::SimNode::working()
@@ -167,12 +202,12 @@ bool dn::SimNode::sendReg()
 	info["slow"] = slowNode_;
 	auto chunksJson = json::array();
 	auto port = chunkPort_;
-	for(auto& it : chunkList_)
+	for (auto& it : chunkList_)
 	{
 		json obj;
 		obj["name"] = it.name;
 		obj["own"] = it.own;
-		if(it.own)
+		if (it.own)
 		{
 			// 依次分配端口
 			obj["port"] = it.port = port++;
@@ -198,7 +233,7 @@ void dn::SimNode::initSocket()
 	zmq_setsockopt(subSocket_, ZMQ_SUBSCRIBE, COMMAND_TOPIC, strlen(COMMAND_TOPIC));
 	zmq_setsockopt(subSocket_, ZMQ_LINGER, &linger, sizeof linger);
 	zmq_connect(subSocket_, sub.str().c_str());
-	
+
 	// 初始化pub
 	if (pubSocket_)
 		zmq_close(pubSocket_);
@@ -218,9 +253,9 @@ void dn::SimNode::send2Admin(int code, const void* data, size_t size)
 	header->ID = id_;
 	header->code = code;
 	header->size = size;
-	if(data && size)
+	if (data && size)
 	{
-		if(bufferSize_ < size + sizeof CommandHeader)
+		if (bufferSize_ < size + sizeof CommandHeader)
 		{
 			setBufferSize(size * 2);
 		}
@@ -233,13 +268,13 @@ void dn::SimNode::send2Admin(int code, const void* data, size_t size)
 void dn::SimNode::processAdminCommand()
 {
 	recvMsg(subSocket_);
-	if(inString() != COMMAND_TOPIC)
+	if (inString() != COMMAND_TOPIC)
 		return;
 	recvMsg(subSocket_);
 	auto* header = inHeader();
-	if(header->ID != ALL_NODE && header->ID != id_)
+	if (header->ID != ALL_NODE && header->ID != id_)
 		return;
-	if(header->code == COMMAND_STEP_FORWARD || header->code == COMMAND_STEP_BACKWARD)
+	if (header->code == COMMAND_STEP_FORWARD || header->code == COMMAND_STEP_BACKWARD)
 	{
 		// 拷贝仿真时间信息
 		memcpy_s(&curTime_, sizeof curTime_, inData(), sizeof curTime_);
@@ -249,13 +284,14 @@ void dn::SimNode::processAdminCommand()
 	case COMMAND_INIT:
 	{
 		auto ok = init();
-		if(ok != ERR_NOP)
+		if (ok != ERR_NOP)
 		{
 			send2Admin(COMMAND_INIT, &ok, sizeof ok);
 			break;
 		}
 		simState_ = SimInit;
-		simInitFunc();
+		if (initCallback_)
+			initCallback_();
 		// 先把初始化的值拷贝到缓存，下一步前会再拷回来，不然会覆盖垃圾值
 		for (auto& it : chunkList_)
 		{
@@ -266,12 +302,13 @@ void dn::SimNode::processAdminCommand()
 		}
 		send2Admin(COMMAND_INIT, &ok, sizeof ok);
 	}
-		break;
+	break;
 	case COMMAND_START:
 		simSteps_ = 0;
 		curTime_ = 0;
 		simState_ = SimRun;
-		simStartFunc();
+		if (startCallback_)
+			startCallback_();
 		break;
 	case COMMAND_STEP_FORWARD:
 		copyNOwnChunks();
@@ -283,10 +320,10 @@ void dn::SimNode::processAdminCommand()
 		simState_ = SimRun;
 		if (!slowNode_)
 		{
-			if (replayState_ == Replaying)
-				replayStepFunc(simSteps_, curTime_);
-			else
-				simStepFunc(simSteps_, curTime_);
+			if (replayState_ == Replaying && replayStepCallback_)
+				replayStepCallback_(simSteps_, curTime_);
+			else if (simStepCallback_)
+				simStepCallback_(simSteps_, curTime_);
 			// 覆盖数据
 			if (replayState_ == Replaying)
 			{
@@ -298,17 +335,17 @@ void dn::SimNode::processAdminCommand()
 		else
 		{
 			// 慢速节点处理
-			if(!slowRunning_)
+			if (!slowRunning_)
 			{
 				delete slowThread_;
 				slowThread_ = new std::thread([this]()
 					{
 						std::unique_lock<std::mutex> lock(slowMutex_);
 						slowRunning_ = true;
-						if (replayState_ == Replaying)
-							replayStepFunc(simSteps_, curTime_);
-						else
-							simStepFunc(simSteps_, curTime_);
+						if (replayState_ == Replaying && replayStepCallback_)
+							replayStepCallback_(simSteps_, curTime_);
+						else if (simStepCallback_)
+							simStepCallback_(simSteps_, curTime_);
 						++simSteps_;
 						slowRunning_ = false;
 						// 覆盖数据
@@ -333,10 +370,10 @@ void dn::SimNode::processAdminCommand()
 		simState_ = SimRun;
 		if (!slowNode_)
 		{
-			if (replayState_ == Replaying)
-				replayStepBackFunc(simSteps_, curTime_);
-			else
-				simStepFunc(simSteps_, curTime_);
+			if (replayState_ == Replaying && replayStepBackCallback_)
+				replayStepBackCallback_(simSteps_, curTime_);
+			else if (simStepCallback_)
+				simStepCallback_(simSteps_, curTime_);
 			--simSteps_;
 			// 覆盖数据
 			if (replayState_ == Replaying)
@@ -355,10 +392,10 @@ void dn::SimNode::processAdminCommand()
 					{
 						std::unique_lock<std::mutex> lock(slowMutex_);
 						slowRunning_ = true;
-						if (replayState_ == Replaying)
-							replayStepBackFunc(simSteps_, curTime_);
-						else
-							simStepFunc(simSteps_, curTime_);
+						if (replayState_ == Replaying && replayStepBackCallback_)
+							replayStepBackCallback_(simSteps_, curTime_);
+						else if (simStepCallback_)
+							simStepCallback_(simSteps_, curTime_);
 						--simSteps_;
 
 						// 覆盖数据
@@ -376,13 +413,15 @@ void dn::SimNode::processAdminCommand()
 		break;
 	case COMMAND_PAUSE:
 		simState_ = SimPause;
-		simPauseFunc();
+		if (pauseCallback_)
+			pauseCallback_();
 		break;
 	case COMMAND_STOP:
 		simState_ = SimStop;
 		if (recordFile_)
 			fclose(recordFile_);
-		simStopFunc();
+		if (stopCallback_)
+			stopCallback_();
 		break;
 	case COMMAND_REG:
 		regIn();
@@ -401,9 +440,9 @@ uint16_t dn::SimNode::init()
 	replayState_ = info["replay"].get<int>();
 	stepTime_ = info["step"].get<uint32_t>();
 	recordName_ = info["record"].get<std::string>();
-	
+
 	const auto& nodes = info["nodes"];
-	if(nodes.contains(nodeName_))
+	if (nodes.contains(nodeName_))
 	{
 		id_ = nodes[nodeName_]["id"].get<int>();
 	}
@@ -419,7 +458,7 @@ uint16_t dn::SimNode::init()
 	// 初始化数据块
 	for (auto& chunk : chunkList_)
 	{
-		if(chunksInfo.contains(chunk.name))
+		if (chunksInfo.contains(chunk.name))
 		{
 			const auto& obj = chunksInfo[chunk.name];
 			chunk.id = obj["id"];
@@ -436,7 +475,7 @@ uint16_t dn::SimNode::init()
 			else
 			{
 				chunk.socket = zmq_socket(socketContext_, ZMQ_SUB);
-				zmq_connect(chunk.socket,obj["path"].get<std::string>().c_str());
+				zmq_connect(chunk.socket, obj["path"].get<std::string>().c_str());
 				zmq_setsockopt(chunk.socket, ZMQ_SUBSCRIBE, chunk.name.c_str(), chunk.name.size());
 				auto monitorAddr = "inproc://monitor-" + chunk.name;
 				zmq_socket_monitor(chunk.socket, monitorAddr.c_str(), ZMQ_EVENT_CONNECTED);
@@ -456,18 +495,18 @@ uint16_t dn::SimNode::init()
 	}
 
 	// 记录文件操作
-	if(recordSize_)
+	if (recordSize_)
 		recordBuffer_.reset(new char[recordSize_]);
 	auto filename = recordFolder_ + "/" + recordName_ + "_" + nodeName_ + RECORD_FILE_SUFFIX;
 	if (recordFile_)
 		fclose(recordFile_);
-	if(replayState_ == Replaying && recordSize_)
+	if (replayState_ == Replaying && recordSize_)
 	{
-		if(fopen_s(&recordFile_, filename.c_str(), "rb") == 0)
+		if (fopen_s(&recordFile_, filename.c_str(), "rb") == 0)
 		{
 			uint32_t magic;
 			fread_s(&magic, sizeof magic, 1, sizeof magic, recordFile_);
-			if(magic != RECORD_FILE_MAGIC)
+			if (magic != RECORD_FILE_MAGIC)
 			{
 				fclose(recordFile_);
 				recordFile_ = nullptr;
@@ -480,9 +519,9 @@ uint16_t dn::SimNode::init()
 			return ERR_FILE_READ;
 		}
 	}
-	else if(replayState_ == Recording && recordSize_)
+	else if (replayState_ == Recording && recordSize_)
 	{
-		if(fopen_s(&recordFile_, filename.c_str(), "wb") == 0) // 写入magic
+		if (fopen_s(&recordFile_, filename.c_str(), "wb") == 0) // 写入magic
 		{
 			auto magic = RECORD_FILE_MAGIC;
 			fwrite(&magic, 1, sizeof magic, recordFile_);
@@ -495,7 +534,7 @@ uint16_t dn::SimNode::init()
 		}
 	}
 
-	if(monitors.empty())
+	if (monitors.empty())
 		return ERR_NOP;
 	auto t0 = std::chrono::steady_clock::now();
 	auto connected = 0;
@@ -504,11 +543,11 @@ uint16_t dn::SimNode::init()
 	// 等待建立连接，3s
 	while (std::chrono::duration_cast<std::chrono::seconds>(std::chrono::steady_clock::now() - t0).count() < 3.0 && !ok)
 	{
-		if(zmq_poll(monitors.data(),monitors.size(),1) <= 0)
+		if (zmq_poll(monitors.data(), monitors.size(), 1) <= 0)
 			continue;
-		for(auto& it : monitors)
+		for (auto& it : monitors)
 		{
-			if(!(it.revents & ZMQ_POLLIN))
+			if (!(it.revents & ZMQ_POLLIN))
 				continue;
 			zmq_msg_init(&msg);
 			zmq_msg_recv(&msg, it.socket, 0);
@@ -516,11 +555,11 @@ uint16_t dn::SimNode::init()
 			zmq_msg_init(&msg);
 			zmq_msg_recv(&msg, it.socket, 0);
 			zmq_msg_close(&msg);
-				
+
 			if (event == ZMQ_EVENT_CONNECTED)
 			{
 				++connected;
-				if(connected >= monitors.size())
+				if (connected >= monitors.size())
 				{
 					ok = true;
 					break;
@@ -530,7 +569,7 @@ uint16_t dn::SimNode::init()
 	}
 	for (auto& it : monitors)
 		zmq_close(it.socket);
-	
+
 	return ok ? ERR_NOP : ERR_SOCKET;
 }
 
@@ -573,7 +612,7 @@ void dn::SimNode::loadNext()
 				offset += it.size;
 			}
 		}
-		if(feof(recordFile_))
+		if (feof(recordFile_))
 		{
 			fclose(recordFile_);
 			recordFile_ = nullptr;
@@ -602,10 +641,10 @@ void dn::SimNode::copyOwnChunks()
 
 void dn::SimNode::addChunk(const std::string& name, void* pData, size_t size, bool write)
 {
-	if(chunkSet_.count(name) > 0)
+	if (chunkSet_.count(name) > 0)
 		return;
 	chunkSet_.insert(name);
-	chunkList_.emplace_back(name,size,write,pData);
+	chunkList_.emplace_back(name, size, write, pData);
 }
 
 void dn::SimNode::setRecordDataFolder(const std::string& folder)

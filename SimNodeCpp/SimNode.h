@@ -59,18 +59,18 @@ protected:
 	// 仿真初始化回调函数，必须实现
 	void simInitFunc();
 	// 仿真开始函数，可不实现
-	void simStartFunc() override;
+	void simStartFunc();
 	// 仿真暂停函数，可不实现
-	void simPauseFunc() override;
+	void simPauseFunc();
 	// 仿真停止函数，可不实现
-	void simStopFunc() override;
+	void simStopFunc();
 	// 仿真推进函数，必须实现
-	void simStepFunc(uint32_t steps, double time) override;
+	void simStepFunc(uint32_t steps, double time);
 	// 回放模式后退一步的函数，可以不实现，则使用推进函数
-	void replayStepBackFunc(uint32_t steps, double time) override { simStepFunc(steps, time); }
+	void replayStepBackFunc(uint32_t steps, double time);
 	// 回放推进函数，不实现时遇到回放将调用普通仿真函数
-	void replayStepFunc(uint32_t steps, double time) override { simStepFunc(steps, time); }
-	
+	void replayStepFunc(uint32_t steps, double time);
+
 private:
 	// 实际的数据对象
 	SimData data_;

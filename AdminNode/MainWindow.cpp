@@ -197,7 +197,7 @@ void MainWindow::initAdminNode()
 	{
 		adminNode_ = new dn::AdminNode(
 			settings_->value(IniAdminRecvPort, IniAdminRecvPortDefault).toUInt(),
-			settings_->value(IniAdminSendPort, IniAdminSendPort).toUInt());
+			settings_->value(IniAdminSendPort, IniAdminSendPortDefault).toUInt());
 	}
 	setSimStep(settings_->value(IniSimStep, IniSimStepDefault).toUInt());
 	setSimTime(settings_->value(IniSimTime, IniSimTimeDefault).toUInt());

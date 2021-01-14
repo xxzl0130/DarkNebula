@@ -1,10 +1,11 @@
 #pragma once
+#include <DarkNebula/DarkNebulaGlobal.h>
 
 constexpr auto IniFilename = "Admin.ini";
 constexpr auto IniAdminSendPort = "/Admin/SendPort";
-constexpr auto IniAdminSendPortDefault = 9988;
+constexpr auto IniAdminSendPortDefault = dn::ADMIN_SEND_PORT;
 constexpr auto IniAdminRecvPort = "/Admin/RecvPort";
-constexpr auto IniAdminRecvPortDefault = 9999;
+constexpr auto IniAdminRecvPortDefault = dn::ADMIN_RECEIVE_PORT;
 constexpr auto IniSimTime = "/Admin/SimTime";
 constexpr auto IniSimTimeDefault = 20;
 constexpr auto IniSimStep = "/Admin/SimStep";

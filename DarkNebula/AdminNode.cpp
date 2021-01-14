@@ -241,8 +241,12 @@ void dn::AdminNode::startSim()
 		return;
 	if (checkInit())
 	{
-		simSteps_ = 0;
-		curTime_ = 0.0;
+		if(simState_ != SimPause)
+		{
+			// 从暂停恢复的时候时间不清零
+			curTime_ = 0.0;
+			simSteps_ = 0;
+		}
 		curStepTime_ = 0.0;
 		stepNodeCount_ = nodeList_.size() - slowNodeCount_;
 		sendCommand(ALL_NODE, COMMAND_START,sizeof curTime_, &curTime_);
@@ -259,6 +263,7 @@ void dn::AdminNode::pauseSim()
 		return;
 	sendCommand(ALL_NODE, COMMAND_PAUSE, sizeof curTime_, &curTime_);
 	simState_ = SimPause;
+	timer_.stop();
 }
 
 void dn::AdminNode::stopSim()
