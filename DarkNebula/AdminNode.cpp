@@ -44,7 +44,8 @@ void dn::AdminNode::setReceivePort(uint16_t port)
 	zmq_setsockopt(pubSocket_, ZMQ_LINGER, &linger, sizeof linger);
 	std::stringstream ss;
 	ss << "tcp://*:" << receivePort_;
-	assert(zmq_bind(subSocket_, ss.str().c_str()) == 0);
+	int rc = zmq_bind(subSocket_, ss.str().c_str());
+	assert(rc == 0);
 	zmq_setsockopt(subSocket_, ZMQ_SUBSCRIBE, REPLY_TOPIC, strlen(REPLY_TOPIC));
 	startWorking();
 }
@@ -69,7 +70,8 @@ void dn::AdminNode::setSendPort(uint16_t port)
 	zmq_setsockopt(pubSocket_, ZMQ_LINGER, &linger, sizeof linger);
 	std::stringstream ss;
 	ss << "tcp://*:" << sendPort_;
-	assert(zmq_bind(pubSocket_, ss.str().c_str()) == 0);
+	int rc = zmq_bind(pubSocket_, ss.str().c_str());
+	assert(rc == 0);
 	startWorking();
 }
 
@@ -317,6 +319,11 @@ void dn::AdminNode::setRegisterCallback(AdminCallback callback)
 void dn::AdminNode::setAdvanceCallback(AdminCallback callback)
 {
 	advanceCallback_ = std::move(callback);
+}
+
+void dn::AdminNode::setErrorCallback(AdminCallback callback)
+{
+	errorCallback_ = std::move(callback);
 }
 
 void dn::AdminNode::working()

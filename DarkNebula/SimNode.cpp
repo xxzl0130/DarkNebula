@@ -475,7 +475,14 @@ uint16_t dn::SimNode::init()
 			else
 			{
 				chunk.socket = zmq_socket(socketContext_, ZMQ_SUB);
-				zmq_connect(chunk.socket, obj["path"].get<std::string>().c_str());
+				if (obj.contains("path") && obj["path"].get<std::string>().length() > 10)
+				{
+					zmq_connect(chunk.socket, obj["path"].get<std::string>().c_str());
+				}
+				else
+				{
+					return ERR_INFO;
+				}
 				zmq_setsockopt(chunk.socket, ZMQ_SUBSCRIBE, chunk.name.c_str(), chunk.name.size());
 				auto monitorAddr = "inproc://monitor-" + chunk.name;
 				zmq_socket_monitor(chunk.socket, monitorAddr.c_str(), ZMQ_EVENT_CONNECTED);

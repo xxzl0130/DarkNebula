@@ -551,7 +551,14 @@ namespace DarkNebulaSharp
                             ++connected;
                         };
                         Task.Factory.StartNew(monitor.Start);
-                        it.Socket.Connect(obj["path"].Value<string>());
+                        if (obj.Contains("path") && obj["path"].Value<string>().Length > 10)
+                        {
+                            it.Socket.Connect(obj["path"].Value<string>());
+                        }
+                        else
+                        {
+                            return (UInt16)ErrorCode.ERR_INFO;
+                        }
                     }
                 }
                 else

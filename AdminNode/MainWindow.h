@@ -78,6 +78,7 @@ signals:
     void nodeRegister(unsigned node);
     void nodeInitOver(unsigned node);
     void nodeAdvance(unsigned node);
+    void nodeError(unsigned node);
 
 private:
     Ui::MainWindowClass* ui;

@@ -81,6 +81,12 @@ void MainWindow::connect()
 		&MainWindow::nodeInitOverCallback
 	);
 	QObject::connect(
+		this,
+		&MainWindow::nodeError,
+		this,
+		&MainWindow::nodeErrorCallback
+	);
+	QObject::connect(
 		this->ui->initAction,
 		&QAction::triggered,
 		this,
@@ -207,6 +213,7 @@ void MainWindow::initAdminNode()
 	this->adminNode_->setRegisterCallback([&](unsigned id) {emit nodeRegister(id); });
 	this->adminNode_->setAdvanceCallback([&](unsigned id) {emit nodeAdvance(id); });
 	this->adminNode_->setInitOverCallback([&](unsigned id) {emit nodeInitOver(id); });
+	this->adminNode_->setErrorCallback([&](unsigned id) {emit nodeError(id); });
 	updateNodeTree();
 }
 
