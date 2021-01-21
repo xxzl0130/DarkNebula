@@ -165,6 +165,8 @@ namespace dn
 		double simSpeed_;
 		// 定时器
 		Timer timer_;
+		// 缓存需要发送的指令，暂停和停止指令要在监听线程发送，否则运行中可能会冲突
+		SimState cmd2send_;
 
 		// 回调函数
 		AdminCallback initCallback_, registerCallback_, advanceCallback_;

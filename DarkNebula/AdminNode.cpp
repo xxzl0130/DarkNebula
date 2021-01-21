@@ -14,7 +14,8 @@ dn::AdminNode::AdminNode(uint16_t receivePort, uint16_t sendPort):
 	slowNodeCount_(0),
 	stepNodeCount_(0),
 	curStepTime_(0.0),
-	simSpeed_(1.0)
+	simSpeed_(1.0),
+	cmd2send_(SimNop)
 {
 	setBufferSize(1 * 1024 * 1024);
 	setReceivePort(receivePort);
@@ -246,10 +247,10 @@ void dn::AdminNode::startSim()
 			// 从暂停恢复的时候时间不清零
 			curTime_ = 0.0;
 			simSteps_ = 0;
+			sendCommand(ALL_NODE, COMMAND_START, sizeof curTime_, &curTime_);
 		}
 		curStepTime_ = 0.0;
 		stepNodeCount_ = nodeList_.size() - slowNodeCount_;
-		sendCommand(ALL_NODE, COMMAND_START,sizeof curTime_, &curTime_);
 		simState_ = SimRun;
 		if(stepTime_ > 1)
 			curStepTime_ = stepTime_ - 1;
@@ -261,9 +262,7 @@ void dn::AdminNode::pauseSim()
 {
 	if(simState_ != SimRun)
 		return;
-	sendCommand(ALL_NODE, COMMAND_PAUSE, sizeof curTime_, &curTime_);
-	simState_ = SimPause;
-	timer_.stop();
+	cmd2send_ = SimPause;
 }
 
 void dn::AdminNode::stopSim()
@@ -272,9 +271,7 @@ void dn::AdminNode::stopSim()
 	{
 		return;
 	}
-	sendCommand(ALL_NODE, COMMAND_STOP, sizeof curTime_, &curTime_);
-	simState_ = SimStop;
-	timer_.stop();
+	cmd2send_ = SimStop;
 }
 
 void dn::AdminNode::stepForward()
@@ -362,6 +359,23 @@ void dn::AdminNode::working()
 			default:
 				break;
 			}
+		}
+
+		if (cmd2send_ != SimNop)
+		{
+			if (cmd2send_ == SimStop)
+			{
+				sendCommand(ALL_NODE, COMMAND_STOP, sizeof curTime_, &curTime_);
+				simState_ = SimStop;
+				
+			}
+			else if (cmd2send_ == SimPause)
+			{
+				sendCommand(ALL_NODE, COMMAND_PAUSE, sizeof curTime_, &curTime_);
+				simState_ = SimPause;
+			}
+			timer_.stop();
+			cmd2send_ = SimNop;
 		}
 	}
 }

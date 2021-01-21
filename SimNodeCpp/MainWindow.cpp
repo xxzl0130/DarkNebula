@@ -39,6 +39,7 @@ MainWindow::MainWindow(QWidget* parent)
 	QObject::connect(this->simNode_, &SimNode::simPause, this, &MainWindow::simPause, Qt::QueuedConnection);
 	QObject::connect(this->simNode_, &SimNode::simStop, this, &MainWindow::simStop, Qt::QueuedConnection);
 	QObject::connect(this->simNode_, &SimNode::simStep, this, &MainWindow::simStep, Qt::QueuedConnection);
+	QObject::connect(this->ui->regPushButton, &QPushButton::clicked, [this]() {simNode_->regIn(); });
 }
 
 void MainWindow::simInit()
@@ -49,6 +50,7 @@ void MainWindow::simInit()
 void MainWindow::simStart()
 {
 	this->ui->stateLabel->setText(u8"运行");
+	this->ui->regPushButton->setEnabled(false);
 }
 
 void MainWindow::simPause()
@@ -58,6 +60,7 @@ void MainWindow::simPause()
 
 void MainWindow::simStep(const SimData& data, double simTime, uint32_t simStep)
 {
+	this->ui->stateLabel->setText(u8"运行");
 	this->ui->timeLabel->setText(QString::number(simTime));
 	this->ui->stepsLabel->setText(QString::number(simStep));
 	this->ui->valueLabel->setText(QString::number(data.data));
@@ -66,4 +69,5 @@ void MainWindow::simStep(const SimData& data, double simTime, uint32_t simStep)
 void MainWindow::simStop()
 {
 	this->ui->stateLabel->setText(u8"停止");
+	this->ui->regPushButton->setEnabled(true);
 }

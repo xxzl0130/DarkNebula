@@ -59,8 +59,8 @@ namespace DarkNebulaSharp
         public const int COMMAND_TOPIC_LEN = 7;
         public const string REPLY_TOPIC = "reply";
         public const int REPLY_TOPIC_LEN = 5;
-        public const UInt16 ADMIN_RECEIVE_PORT = 6666;
-        public const UInt16 ADMIN_SEND_PORT = 8888;
+        public const UInt16 ADMIN_RECEIVE_PORT = 9988;
+        public const UInt16 ADMIN_SEND_PORT = 9999;
         public const UInt16 CHUNK_PORT = 10000;
         public const string RECORD_FILE_SUFFIX = ".dnr";
         public const UInt32 RECORD_FILE_MAGIC = 0x44417A9F;
@@ -82,6 +82,10 @@ namespace DarkNebulaSharp
                 Marshal.StructureToPtr(structure, bufferIntPtr, true);
                 Marshal.Copy(bufferIntPtr, buffer, 0, size);
             }
+            catch (Exception)
+            {
+                // ignore
+            }
             finally
             {
                 Marshal.FreeHGlobal(bufferIntPtr);
@@ -99,6 +103,10 @@ namespace DarkNebulaSharp
             {
                 Marshal.Copy(dataBuffer, 0, allocIntPtr, size);
                 obj = Marshal.PtrToStructure(allocIntPtr, typeof(T));
+            }
+            catch (Exception)
+            {
+                // ignore
             }
             finally
             {

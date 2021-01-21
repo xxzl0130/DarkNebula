@@ -133,7 +133,7 @@ namespace DarkNebulaSharp
 
         // 仿真开始回调函数，可不设置
         private SimEventDelegate startCallback;
-        public SimEventDelegate StartCallback_
+        public SimEventDelegate StartCallback
         {
             get => startCallback;
             set
@@ -358,9 +358,16 @@ namespace DarkNebulaSharp
         private void ProcessAdminCommand()
         {
             InBuffer = SubSocket.ReceiveFrameBytes();
+            if (InBuffer.Length < Marshal.SizeOf(typeof(CommandHeader)))
+                return;
             var header = Utils.ByteToStructure<CommandHeader>(InBuffer);
             if (header.ID != DNVars.ALL_NODE && header.ID != ID)
                 return;
+            // 拷贝仿真时间
+            if (header.code == CommandCode.COMMAND_STEP_FORWARD || header.code == CommandCode.COMMAND_STEP_BACKWARD)
+            {
+                curTime = Utils.ByteToStructure<double>(InBuffer.Skip(Marshal.SizeOf(typeof(CommandHeader))).ToArray());
+            }
             switch (header.code)
             {
                 case CommandCode.COMMAND_INIT:
