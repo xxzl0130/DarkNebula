@@ -497,6 +497,10 @@ void dn::AdminNode::nodeInit(char* buffer, int len)
 			if(checkInit())
 				initCallback_(ALL_NODE);
 		}
+		if(code != ERR_NOP && errorCallback_)
+		{
+			errorCallback_(header->ID);
+		}
 	}
 }
 

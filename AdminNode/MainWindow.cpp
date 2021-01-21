@@ -1,6 +1,7 @@
 #include "MainWindow.h"
 #include <QIcon>
 #include <QMessageBox>
+#include <QDebug>
 #include "CommonHeader.h"
 
 MainWindow::MainWindow(QWidget *parent):
@@ -321,7 +322,6 @@ void MainWindow::stopSim()
 	this->ui->progressBar->setMaximum(100);
 	this->ui->progressBar->setMinimum(0);
 	this->ui->progressBar->setValue(100);
-
 }
 
 void MainWindow::speedUpSim()
@@ -353,7 +353,10 @@ void MainWindow::nodeInitOverCallback(int node)
 	auto* item = this->ui->nodeTree->topLevelItem(node);
 	if (item == nullptr)
 		return;
-	item->setData(3, Qt::DisplayRole, u8"¡Ì");
+	if(this->adminNode_->getNodeList()[node].init)
+		item->setData(2, Qt::DisplayRole, u8"¡Ì");
+	else
+		item->setData(2, Qt::DisplayRole, u8" ");
 }
 
 void MainWindow::nodeAdvanceCallback(int node)
@@ -402,4 +405,29 @@ void MainWindow::nodeAdvanceCallback(int node)
 		return;
 	auto step = this->adminNode_->getNodeList()[node].steps;
 	item->setData(3, Qt::DisplayRole, QString::number(step));
+}
+
+void MainWindow::nodeErrorCallback(int node)
+{
+	auto* item = this->ui->nodeTree->topLevelItem(node);
+	if (item == nullptr)
+		return;
+	auto code = this->adminNode_->getNodeList()[node].errorCode;
+	QString errStr = "";
+	switch (code)
+	{
+	case dn::ERR_NOP:
+		break;
+	case dn::ERR_SOCKET:
+		errStr = u8"ERR_SOCKET";
+		break;
+	case dn::ERR_INFO:
+		errStr = u8"ERR_INFO";
+		break;
+	case dn::ERR_FILE_READ:
+	case dn::ERR_FILE_WRITE:
+		errStr = u8"ERR_FILE";
+		break;
+	}
+	item->setData(2, Qt::DisplayRole, errStr);
 }

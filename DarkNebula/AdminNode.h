@@ -120,6 +120,8 @@ namespace dn
 		void setRegisterCallback(AdminCallback callback);
 		// 推进
 		void setAdvanceCallback(AdminCallback callback);
+		// 错误
+		void setErrorCallback(AdminCallback callback);
 
 	private:
 		// 监听函数
@@ -169,7 +171,7 @@ namespace dn
 		SimState cmd2send_;
 
 		// 回调函数
-		AdminCallback initCallback_, registerCallback_, advanceCallback_;
+		AdminCallback initCallback_, registerCallback_, advanceCallback_, errorCallback_;
 	};
 }
 

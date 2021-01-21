@@ -71,6 +71,8 @@ private slots:
     void nodeInitOverCallback(int node);
 	// 节点推进一步回调函数
     void nodeAdvanceCallback(int node);
+    // 节点错误回调函数
+    void nodeErrorCallback(int node);
 
 signals:
     void nodeRegister(unsigned node);
