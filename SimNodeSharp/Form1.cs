@@ -54,7 +54,11 @@ namespace SimNodeSharp
         private void SimStepCallback(uint step, double time)
         {
             // 将耗时的仿真操作放在子线程中
+            // 需要手动获取数据
             simNode.GetChunkData("counter", out counter);
+            // 下面是写入数据的示例，用于更新自己发布的数据
+            // 这里没有写入权限，不会报错但也不会更新数据
+            simNode.SetChunkData("counter", counter);
             // 回到ui线程操作ui
             this.Invoke(new Action(() =>
             {

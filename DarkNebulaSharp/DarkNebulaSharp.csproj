@@ -2,11 +2,23 @@
 
   <PropertyGroup>
     <TargetFramework>netstandard2.0</TargetFramework>
+    <Authors>xxzl0130</Authors>
+    <Copyright>xxzl0130</Copyright>
+    <Description>基于ZeroMQ的分布式仿真系统C#库</Description>
+    <PackageProjectUrl>https://github.com/xxzl0130/DarkNebula</PackageProjectUrl>
+    <PackageLicenseFile>LICENSE</PackageLicenseFile>
   </PropertyGroup>
 
   <ItemGroup>
     <PackageReference Include="NetMQ" Version="4.0.1.6" />
     <PackageReference Include="Newtonsoft.Json" Version="12.0.3" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <None Include="..\LICENSE">
+      <Pack>True</Pack>
+      <PackagePath></PackagePath>
+    </None>
   </ItemGroup>
 
 </Project>
