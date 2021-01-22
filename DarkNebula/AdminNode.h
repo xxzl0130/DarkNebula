@@ -92,6 +92,8 @@ namespace dn
 		void setReplay(bool enable, const std::string& name = "");
 		// 是否在重播
 		bool isReplaying() const;
+		// 删除录制文件
+		void removeRecord(const std::string& name);
 		// 设置仿真速度，实时为1
 		void setSimSpeed(double speed = 1);
 		// 获取仿真速度

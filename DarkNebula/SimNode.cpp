@@ -426,6 +426,12 @@ void dn::SimNode::processAdminCommand()
 	case COMMAND_REG:
 		regIn();
 		break;
+	case COMMAND_DEL_REC:
+		{
+		auto name = std::string(inData(), header->size);
+		name = recordFolder_ + "/" + name + RECORD_FILE_SUFFIX;
+		remove(name.c_str()); // É¾³ýÎÄ¼þ
+		}
 	default:
 		break;
 	}
@@ -659,4 +665,5 @@ void dn::SimNode::setRecordDataFolder(const std::string& folder)
 	if (running_)
 		return;
 	recordFolder_ = folder;
+	system(("mkdir " + recordFolder_).c_str());
 }

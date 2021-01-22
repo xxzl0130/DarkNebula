@@ -115,7 +115,10 @@ namespace DarkNebulaSharp
             set
             {
                 if (!running)
+                {
                     recordFolder = value;
+                    Directory.CreateDirectory(recordFolder);
+                }
             }
         }
 
@@ -490,6 +493,14 @@ namespace DarkNebulaSharp
                     break;
                 case CommandCode.COMMAND_REG:
                     RegIn();
+                    break;
+                case CommandCode.COMMAND_DEL_REC:
+                    var name = System.Text.Encoding.UTF8.GetString(InBuffer.Skip(Marshal.SizeOf(typeof(CommandHeader))).ToArray());
+                    name = recordFolder + "/" + name + DNVars.RECORD_FILE_SUFFIX;
+                    if (File.Exists(name))
+                    {
+                        File.Delete(name);
+                    }
                     break;
             }
         }

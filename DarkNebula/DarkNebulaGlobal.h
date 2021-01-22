@@ -42,6 +42,7 @@ namespace dn
 		COMMAND_STEP_IN,			// 单步模式
 		COMMAND_PAUSE,				// 暂停
 		COMMAND_STOP,				// 结束
+		COMMAND_DEL_REC,			// 删除录制文件
 	};
 
 	enum SimState

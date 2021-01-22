@@ -183,6 +183,11 @@ bool dn::AdminNode::isReplaying() const
 	return replayState_ == Replaying;
 }
 
+void dn::AdminNode::removeRecord(const std::string& name)
+{
+	sendCommand(ALL_NODE, COMMAND_DEL_REC, name.length(), name.data());
+}
+
 void dn::AdminNode::setSimSpeed(double speed)
 {
 	if(speed <= 0.0)
@@ -372,7 +377,6 @@ void dn::AdminNode::working()
 			case COMMAND_STEP_BACKWARD:
 				nodeStep(inBufferData(), len);
 				break;
-			// TODO
 			default:
 				break;
 			}

@@ -56,6 +56,8 @@ void MainWindow::setFreeSim(bool free)
 
 void MainWindow::setPort(unsigned recv, unsigned send)
 {
+	if (this->adminNode_->getSimState() >= dn::SimRun)
+		return;
 	adminNode_->setReceivePort(recv);
 	adminNode_->setSendPort(send);
 	settings_->setValue(IniAdminRecvPort, recv);
@@ -64,6 +66,8 @@ void MainWindow::setPort(unsigned recv, unsigned send)
 
 void MainWindow::setRecord(bool enable, const QString& name)
 {
+	if (this->adminNode_->getSimState() >= dn::SimRun)
+		return;
 	this->adminNode_->setRecord(enable, name.toStdString());
 	if (enable)
 	{
@@ -80,6 +84,8 @@ void MainWindow::setRecord(bool enable, const QString& name)
 
 void MainWindow::setReplay(bool enable, const QString& name)
 {
+	if (this->adminNode_->getSimState() >= dn::SimRun)
+		return;
 	this->adminNode_->setReplay(enable, name.toStdString());
 	if (enable)
 	{
@@ -93,12 +99,16 @@ void MainWindow::setReplay(bool enable, const QString& name)
 
 void MainWindow::setAutoRecord(bool enable)
 {
+	if (this->adminNode_->getSimState() >= dn::SimRun)
+		return;
 	this->autoRecord_ = enable;
 }
 
 void MainWindow::removeRecord(const QString& name)
 {
-	//TODO
+	if (this->adminNode_->getSimState() >= dn::SimRun)
+		return;
+	this->adminNode_->removeRecord(name.toStdString());
 }
 
 void MainWindow::connect()
