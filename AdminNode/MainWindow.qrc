@@ -11,5 +11,6 @@
         <file>Resource/init.png</file>
         <file>Resource/data.png</file>
         <file>Resource/node.png</file>
+        <file>Resource/record.png</file>
     </qresource>
 </RCC>

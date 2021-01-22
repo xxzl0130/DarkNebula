@@ -14,3 +14,4 @@ constexpr auto IniSimSpeed = "/Admin/SimSpeed";
 constexpr auto IniSimSpeedDefault = 100;
 constexpr auto IniFreeSim = "/Admin/FreeSim";
 constexpr auto IniFreeSimDefault = false;
+constexpr auto IniRecordList = "/Record/List";

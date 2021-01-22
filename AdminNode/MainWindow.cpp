@@ -2,6 +2,7 @@
 #include <QIcon>
 #include <QMessageBox>
 #include <QDebug>
+#include <QDateTime>
 #include "CommonHeader.h"
 
 MainWindow::MainWindow(QWidget *parent):
@@ -11,7 +12,8 @@ MainWindow::MainWindow(QWidget *parent):
 	settings_(new QSettings(IniFilename,QSettings::IniFormat,this)),
 	nodeIcon_(":/MainWindow/Resource/node.png"),
 	dataIcon_(":/MainWindow/Resource/data.png"),
-	settingDialog_(new SettingDialog(this))
+	settingDialog_(new SettingDialog(settings_, this)),
+	autoRecord_(false)
 {
     ui->setupUi(this);
 	connect();
@@ -58,6 +60,45 @@ void MainWindow::setPort(unsigned recv, unsigned send)
 	adminNode_->setSendPort(send);
 	settings_->setValue(IniAdminRecvPort, recv);
 	settings_->setValue(IniAdminSendPort, send);
+}
+
+void MainWindow::setRecord(bool enable, const QString& name)
+{
+	this->adminNode_->setRecord(enable, name.toStdString());
+	if (enable)
+	{
+		this->ui->replayStateLineEdit->setText(u8"录制" + name);
+		auto list = this->settings_->value(IniRecordList).toStringList();
+		list.append(name);
+		this->settings_->setValue(IniRecordList, list);
+	}
+	else
+	{
+		this->ui->replayStateLineEdit->setText(u8"无");
+	}
+}
+
+void MainWindow::setReplay(bool enable, const QString& name)
+{
+	this->adminNode_->setReplay(enable, name.toStdString());
+	if (enable)
+	{
+		this->ui->replayStateLineEdit->setText(u8"重播" + name);
+	}
+	else
+	{
+		this->ui->replayStateLineEdit->setText(u8"无");
+	}
+}
+
+void MainWindow::setAutoRecord(bool enable)
+{
+	this->autoRecord_ = enable;
+}
+
+void MainWindow::removeRecord(const QString& name)
+{
+	//TODO
 }
 
 void MainWindow::connect()
@@ -134,6 +175,18 @@ void MainWindow::connect()
 		this,
 		&MainWindow::pauseSim
 	);
+	/*QObject::connect(
+		this->ui->replayAction,
+		&QAction::triggered,
+		this,
+		&MainWindow::setReplay
+	);
+	QObject::connect(
+		this->ui->recordAction,
+		&QAction::triggered,
+		this,
+		&MainWindow::setRecord
+	);*/
 	QObject::connect(
 		this->ui->setAction,
 		&QAction::triggered,
@@ -169,6 +222,24 @@ void MainWindow::connect()
 		&SettingDialog::sendPort,
 		this,
 		&MainWindow::setPort
+	);
+	QObject::connect(
+		this->settingDialog_,
+		&SettingDialog::setReplay,
+		this,
+		&MainWindow::setReplay
+	);
+	QObject::connect(
+		this->settingDialog_,
+		&SettingDialog::setRecord,
+		this,
+		&MainWindow::setRecord
+	);
+	QObject::connect(
+		this->settingDialog_,
+		&SettingDialog::setAutoRecord,
+		this,
+		&MainWindow::setAutoRecord
 	);
 }
 
@@ -271,6 +342,10 @@ void MainWindow::initNodes()
 	{
 		QMessageBox::warning(this, u8"错误", u8"仿真运行中不可初始化节点！");
 		return;
+	}
+	if(autoRecord_)
+	{
+		this->setRecord(true, QDateTime::currentDateTime().toString("yyyy.MM.dd.hh.mm.ss"));
 	}
 	this->adminNode_->initSim();
 	this->ui->simStateLineEdit->setText(u8"初始化中");

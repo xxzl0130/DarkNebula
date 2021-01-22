@@ -158,6 +158,11 @@ void dn::AdminNode::setRecord(bool enable, const std::string& name)
 	}
 }
 
+bool dn::AdminNode::isRecording() const
+{
+	return replayState_ == Recording;
+}
+
 void dn::AdminNode::setReplay(bool enable, const std::string& name)
 {
 	if (simState_ > SimStop)
@@ -171,6 +176,11 @@ void dn::AdminNode::setReplay(bool enable, const std::string& name)
 	{
 		replayState_ = ReplayNop;
 	}
+}
+
+bool dn::AdminNode::isReplaying() const
+{
+	return replayState_ == Replaying;
 }
 
 void dn::AdminNode::setSimSpeed(double speed)

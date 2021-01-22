@@ -32,6 +32,14 @@ public slots:
     void setFreeSim(bool free = true);
 	// 设置端口
     void setPort(unsigned recv, unsigned send);
+    // 设置录制模式
+    void setRecord(bool enable, const QString& name);
+    // 设置重播模式
+    void setReplay(bool enable, const QString& name);
+    // 设置自动录制
+	void setAutoRecord(bool enable);
+	// 删除记录
+    void removeRecord(const QString& name);
 
 private:
 	// 链接信号槽
@@ -87,5 +95,6 @@ private:
     QIcon nodeIcon_, dataIcon_;
     std::queue<std::pair<unsigned, unsigned>> simTimeAvgQueue_;
     SettingDialog* settingDialog_;
+    bool autoRecord_;
 };
 

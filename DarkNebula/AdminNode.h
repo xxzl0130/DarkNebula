@@ -82,12 +82,16 @@ namespace dn
 		void setStepTime(unsigned ms);
 		// 设置启用录制，启用时需要提供保存的记录名，与回放互斥，取消时不会自动启用回放
 		void setRecord(bool enable, const std::string& name = "");
+		// 是否在录制
+		bool isRecording() const;
 		/**
 		 * \brief 设置启用回放，与录制互斥，取消时不会自动启用录制
 		 * \param enable 是否启用
 		 * \param name 启用时需要提供保存的记录名
 		 */
 		void setReplay(bool enable, const std::string& name = "");
+		// 是否在重播
+		bool isReplaying() const;
 		// 设置仿真速度，实时为1
 		void setSimSpeed(double speed = 1);
 		// 获取仿真速度
