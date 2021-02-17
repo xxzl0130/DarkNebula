@@ -216,7 +216,9 @@ void dn::AdminNode::initSim()
 		return;
 	simState_ = SimInit;
 	curTime_ = 0.0;
-	simSteps_ = 0;
+	simSteps_ = -1;
+	for (auto& node : nodeList_)
+		node.steps = 0;
 	slowNodeCount_ = 0;
 	stepNodeCount_ = 0;
 	// 把各种信息打到json里发布
@@ -263,7 +265,9 @@ void dn::AdminNode::startSim()
 		{
 			// 从暂停恢复的时候时间不清零
 			curTime_ = 0.0;
-			simSteps_ = 0;
+			simSteps_ = -1;
+			for (auto& node : nodeList_)
+				node.steps = 0;
 			sendCommand(ALL_NODE, COMMAND_START, sizeof curTime_, &curTime_);
 		}
 		curStepTime_ = 0.0;

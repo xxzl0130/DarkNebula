@@ -180,7 +180,7 @@ void dn::SimNode::working()
 			continue;
 		for (auto i = 0; i < pollitems_.size(); ++i)
 		{
-			if (pollitems_[i].revents == ZMQ_POLLIN)
+			if (pollitems_[i].revents & ZMQ_POLLIN)
 			{
 				if (i == 0)
 				{
@@ -188,6 +188,9 @@ void dn::SimNode::working()
 				}
 				else
 				{
+					recvMsg(pollitems_[i].socket);
+					if(inString() != chunkList_[i - 1].name)
+						continue;
 					// 先读到缓存里
 					zmq_recv(chunkList_[i - 1].socket, chunkList_[i - 1].buffer.get(), chunkList_[i - 1].size, ZMQ_DONTWAIT);
 				}
@@ -460,73 +463,70 @@ uint16_t dn::SimNode::init()
 	}
 	const auto& chunksInfo = info["chunks"];
 	pollitems_.clear();
-	zmq_pollitem_t item{ subSocket_, 0, ZMQ_POLLIN };
-	pollitems_.emplace_back(item);
+	zmq_pollitem_t subadmin{ subSocket_, 0, ZMQ_POLLIN };
+	pollitems_.emplace_back(subadmin);
 	recordSize_ = 0;
 
 	std::vector<zmq_pollitem_t> monitors;
 	// 初始化数据块
 	for (auto& chunk : chunkList_)
 	{
-		if (chunksInfo.contains(chunk.name))
+		if (!chunksInfo.contains(chunk.name))
+			return ERR_INFO;
+		const auto& obj = chunksInfo[chunk.name];
+		chunk.id = obj["id"];
+		if (chunk.own) // pub
 		{
-			const auto& obj = chunksInfo[chunk.name];
-			chunk.id = obj["id"];
-			if (chunk.own) // pub
+			std::stringstream ss;
+			ss << "tcp://*:" << chunk.port;
+			if (chunk.path != ss.str())
 			{
-				std::stringstream ss;
-				ss << "tcp://*:" << chunk.port;
-				if (chunk.path != ss.str())
-				{
-					if (chunk.socket)
-					{
-						zmq_close(chunk.socket);
-						chunk.socket = nullptr;
-					}
-					chunk.socket = zmq_socket(socketContext_, ZMQ_PUB);
-					chunk.path = ss.str();
-					zmq_bind(chunk.socket, chunk.path.c_str());
-				}
-				recordSize_ += chunk.size;
-			}
-			else
-			{
-				if (!obj.contains("path") || obj["path"].get<std::string>().length() <= 10)
-				{
-					return ERR_INFO;
-				}
 				if (chunk.socket)
 				{
-					// 路径没变就保持连接
-					if (chunk.path == obj["path"].get<std::string>())
-						continue;
 					zmq_close(chunk.socket);
 					chunk.socket = nullptr;
 				}
-				chunk.socket = zmq_socket(socketContext_, ZMQ_SUB);
-				chunk.path = obj["path"].get<std::string>();
-				zmq_connect(chunk.socket, chunk.path.c_str());
-				zmq_setsockopt(chunk.socket, ZMQ_SUBSCRIBE, chunk.name.c_str(), chunk.name.size());
-
-				// 连接成功的监控
-			    auto monitorAddr = "inproc://monitor-" + chunk.name;
-				zmq_socket_monitor(chunk.socket, monitorAddr.c_str(), ZMQ_EVENT_CONNECTED);
-				zmq_pollitem_t monitor;
-				monitor.socket = zmq_socket(socketContext_, ZMQ_PAIR);
-				zmq_connect(monitor.socket, monitorAddr.c_str());
-				monitor.fd = 0;
-				monitor.events = ZMQ_POLLIN;
-				monitors.emplace_back(monitor);
+				chunk.socket = zmq_socket(socketContext_, ZMQ_PUB);
+				chunk.path = ss.str();
+				zmq_bind(chunk.socket, chunk.path.c_str());
+			}
+			recordSize_ += chunk.size;
+		}
+		else
+		{
+			if (!obj.contains("path") || obj["path"].get<std::string>().length() <= 10)
+			{
+				return ERR_INFO;
 			}
 			if (chunk.socket)
 			{
-				// 全部加入监听列表
-				zmq_pollitem_t item{ chunk.socket, 0, ZMQ_POLLIN };
-				pollitems_.emplace_back(item);
+				// 路径没变就保持连接
+				if (chunk.path == obj["path"].get<std::string>())
+					continue;
+				zmq_close(chunk.socket);
+				chunk.socket = nullptr;
 			}
+			chunk.socket = zmq_socket(socketContext_, ZMQ_SUB);
+			chunk.path = obj["path"].get<std::string>();
+			zmq_connect(chunk.socket, chunk.path.c_str());
+			zmq_setsockopt(chunk.socket, ZMQ_SUBSCRIBE, chunk.name.c_str(), chunk.name.size());
+
+			// 连接成功的监控
+			auto monitorAddr = "inproc://monitor-" + chunk.name;
+			zmq_socket_monitor(chunk.socket, monitorAddr.c_str(), ZMQ_EVENT_CONNECTED);
+			zmq_pollitem_t monitor;
+			monitor.socket = zmq_socket(socketContext_, ZMQ_PAIR);
+			zmq_connect(monitor.socket, monitorAddr.c_str());
+			monitor.fd = 0;
+			monitor.events = ZMQ_POLLIN;
+			monitors.emplace_back(monitor);
 		}
-		else
-			return ERR_INFO;
+		if (chunk.socket)
+		{
+			// 全部加入监听列表
+			zmq_pollitem_t item{ chunk.socket, 0, ZMQ_POLLIN };
+			pollitems_.emplace_back(item);
+		}
 	}
 
 	// 记录文件操作
@@ -611,7 +611,7 @@ uint16_t dn::SimNode::init()
 void dn::SimNode::sendChunk(Chunk& chunk)
 {
 	zmq_send(chunk.socket, chunk.name.c_str(), chunk.name.size(), ZMQ_SNDMORE);
-	zmq_send(chunk.socket, chunk.pData, chunk.size, ZMQ_DONTWAIT);
+	zmq_send(chunk.socket, chunk.pData, chunk.size, 0);
 	if (replayState_ == Recording && recordFile_) // 写入数据
 	{
 		fwrite(chunk.pData, 1, chunk.size, recordFile_);
