@@ -532,15 +532,16 @@ namespace DarkNebulaSharp
             var chunks = info["chunks"].Value<JObject>();
             recordSize = 0;
             int connected = 0, subCount = 0;
+            var monitors = new List<NetMQMonitor>();
             foreach (var it in chunkList)
             {
                 if (chunks.ContainsKey(it.Name))
                 {
                     var obj = chunks[it.Name];
                     it.ID = obj["id"].Value<int>();
-                    it.Socket?.Dispose();
                     if (it.Own) // Pub
                     {
+                        it.Socket?.Dispose();
                         it.Socket = new PublisherSocket();
                         it.Socket.Bind("tcp://*:" + it.Port.ToString());
                         recordSize += it.Buffer.Length;
@@ -548,12 +549,18 @@ namespace DarkNebulaSharp
                     else
                     {
                         ++subCount;
+                        if (it.Socket != null)
+                        {
+                            Poller.Remove(it.Socket);
+                            it.Socket.Dispose();
+                        }
+
                         it.Socket = new SubscriberSocket();
                         ((SubscriberSocket)it.Socket).Subscribe(System.Text.Encoding.UTF8.GetBytes(it.Name));
                         it.Socket.ReceiveReady += SocketReady;
                         Poller.Add(it.Socket);
                         var name = "inproc://monitor-" + it.Name;
-                        var monitor = new NetMQMonitor(it.Socket, "inproc://monitor-" + it.Name, SocketEvents.Connected)
+                        var monitor = new NetMQMonitor(it.Socket, "inproc://monitor-" + it.Name + "-" + GetUTC(), SocketEvents.Connected)
                         {
                             Timeout = TimeSpan.FromMilliseconds(3000)
                         };
@@ -562,7 +569,8 @@ namespace DarkNebulaSharp
                             ++connected;
                         };
                         Task.Factory.StartNew(monitor.Start);
-                        if (obj.Contains("path") && obj["path"].Value<string>().Length > 10)
+                        monitors.Add(monitor);
+                        if (obj["path"]?.Value<string>().Length > 10)
                         {
                             it.Socket.Connect(obj["path"].Value<string>());
                         }
@@ -618,7 +626,7 @@ namespace DarkNebulaSharp
 
             var t0 = System.DateTime.Now;
             var ok = false;
-            while ((System.DateTime.Now - t0).TotalMilliseconds < 3000) // 等待三秒
+            while (monitors.Count > 0 && (System.DateTime.Now - t0).TotalMilliseconds < 3000) // 等待三秒
             {
                 if (connected >= subCount)
                 {
@@ -626,6 +634,12 @@ namespace DarkNebulaSharp
                     break;
                 }
                 Thread.Sleep(1);
+            }
+
+            foreach (var monitor in monitors)
+            {
+                monitor.Stop();
+                //monitor.Dispose();
             }
 
             return (UInt16) (ok?ErrorCode.ERR_NOP:ErrorCode.ERR_SOCKET);
@@ -707,5 +721,14 @@ namespace DarkNebulaSharp
         private Mutex slowMutex = new Mutex(false);
         // slow标志
         private bool slowRunning = false;
+
+        /// <summary>
+        /// 获取UTC时间戳
+        /// </summary>
+        /// <returns>UTC时间戳</returns>
+        private static int GetUTC()
+        {
+            return (int)(DateTime.Now - new DateTime(1970, 1, 1)).TotalSeconds;
+        }
     }
 }
