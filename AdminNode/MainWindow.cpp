@@ -359,6 +359,7 @@ void MainWindow::initNodes()
 	}
 	this->adminNode_->initSim();
 	this->ui->simStateLineEdit->setText(u8"≥ı ºªØ÷–");
+	updateNodeTree();
 }
 
 void MainWindow::startSim()

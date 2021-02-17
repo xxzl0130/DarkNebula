@@ -16,16 +16,19 @@ namespace DarkNebulaSharp
         public byte[] Buffer;
         // socket
         public NetMQ.NetMQSocket Socket = null;
+        // 链接
+        public string Path;
 
         public Chunk()
         {
         }
 
-        public Chunk(string name, int size, bool own)
+        public Chunk(string name, int size, bool own, string path = "")
         {
             Name = name;
             Own = own;
             Buffer = new byte[size];
+            Path = path;
         }
     }
 }

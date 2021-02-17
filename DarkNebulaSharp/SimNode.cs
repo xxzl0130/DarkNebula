@@ -541,25 +541,42 @@ namespace DarkNebulaSharp
                     it.ID = obj["id"].Value<int>();
                     if (it.Own) // Pub
                     {
-                        it.Socket?.Dispose();
-                        it.Socket = new PublisherSocket();
-                        it.Socket.Bind("tcp://*:" + it.Port.ToString());
+                        var path = "tcp://*:" + it.Port.ToString();
+                        if (it.Path != path)
+                        {
+                            it.Socket?.Dispose();
+                            it.Socket = new PublisherSocket();
+                            it.Path = path;
+                            it.Socket.Bind(path);
+                        }
                         recordSize += it.Buffer.Length;
                     }
                     else
                     {
                         ++subCount;
+                        if (!(obj["path"]?.Value<string>().Length > 10))
+                        {
+                            return (UInt16) ErrorCode.ERR_INFO;
+                        }
+
                         if (it.Socket != null)
                         {
+                            var path = obj["path"].Value<string>();
+                            if (it.Path == path) // 路径没变就保持连接
+                                continue;
+                            it.Path = path;
                             Poller.Remove(it.Socket);
                             it.Socket.Dispose();
+                            it.Socket = null;
                         }
 
                         it.Socket = new SubscriberSocket();
-                        ((SubscriberSocket)it.Socket).Subscribe(System.Text.Encoding.UTF8.GetBytes(it.Name));
+                        ((SubscriberSocket) it.Socket).Subscribe(System.Text.Encoding.UTF8.GetBytes(it.Name));
                         it.Socket.ReceiveReady += SocketReady;
                         Poller.Add(it.Socket);
-                        var name = "inproc://monitor-" + it.Name;
+                        it.Socket.Connect(obj["path"].Value<string>());
+
+                        // 连接成功的监控
                         var monitor = new NetMQMonitor(it.Socket, "inproc://monitor-" + it.Name + "-" + GetUTC(), SocketEvents.Connected)
                         {
                             Timeout = TimeSpan.FromMilliseconds(3000)
@@ -570,14 +587,6 @@ namespace DarkNebulaSharp
                         };
                         Task.Factory.StartNew(monitor.Start);
                         monitors.Add(monitor);
-                        if (obj["path"]?.Value<string>().Length > 10)
-                        {
-                            it.Socket.Connect(obj["path"].Value<string>());
-                        }
-                        else
-                        {
-                            return (UInt16)ErrorCode.ERR_INFO;
-                        }
                     }
                 }
                 else
@@ -642,7 +651,7 @@ namespace DarkNebulaSharp
                 //monitor.Dispose();
             }
 
-            return (UInt16) (ok?ErrorCode.ERR_NOP:ErrorCode.ERR_SOCKET);
+            return (UInt16) (ok ? ErrorCode.ERR_NOP : ErrorCode.ERR_SOCKET);
         }
 
         // 发送一个数据块

@@ -26,9 +26,11 @@ namespace dn
 		void* pData = nullptr;
 		// 缓存指针
 		std::unique_ptr<char[]> buffer = nullptr;
+		// 路径
+		std::string path;
 		Chunk() {}
-		Chunk(const std::string& n, size_t s, bool write, void* p) :
-			name(n), size(s), own(write), id(-1), pData(p), buffer(new char[size]) {}
+		Chunk(const std::string& n, size_t s, bool write, void* p, const std::string& path_) :
+			name(n), size(s), own(write), id(-1), pData(p), buffer(new char[size]),path(path_) {}
 	};
 }
 
@@ -457,7 +459,9 @@ uint16_t dn::SimNode::init()
 		return ERR_INFO;
 	}
 	const auto& chunksInfo = info["chunks"];
-	pollitems_.resize(1); //仅保留接收指令的socket
+	pollitems_.clear();
+	zmq_pollitem_t item{ subSocket_, 0, ZMQ_POLLIN };
+	pollitems_.emplace_back(item);
 	recordSize_ = 0;
 
 	std::vector<zmq_pollitem_t> monitors;
@@ -468,29 +472,44 @@ uint16_t dn::SimNode::init()
 		{
 			const auto& obj = chunksInfo[chunk.name];
 			chunk.id = obj["id"];
-			if (chunk.socket)
-				zmq_close(chunk.socket);
 			if (chunk.own) // pub
 			{
-				chunk.socket = zmq_socket(socketContext_, ZMQ_PUB);
 				std::stringstream ss;
 				ss << "tcp://*:" << chunk.port;
-				zmq_bind(chunk.socket, ss.str().c_str());
+				if (chunk.path != ss.str())
+				{
+					if (chunk.socket)
+					{
+						zmq_close(chunk.socket);
+						chunk.socket = nullptr;
+					}
+					chunk.socket = zmq_socket(socketContext_, ZMQ_PUB);
+					chunk.path = ss.str();
+					zmq_bind(chunk.socket, chunk.path.c_str());
+				}
 				recordSize_ += chunk.size;
 			}
 			else
 			{
-				chunk.socket = zmq_socket(socketContext_, ZMQ_SUB);
-				if (obj.contains("path") && obj["path"].get<std::string>().length() > 10)
-				{
-					zmq_connect(chunk.socket, obj["path"].get<std::string>().c_str());
-				}
-				else
+				if (!obj.contains("path") || obj["path"].get<std::string>().length() <= 10)
 				{
 					return ERR_INFO;
 				}
+				if (chunk.socket)
+				{
+					// 路径没变就保持连接
+					if (chunk.path == obj["path"].get<std::string>())
+						continue;
+					zmq_close(chunk.socket);
+					chunk.socket = nullptr;
+				}
+				chunk.socket = zmq_socket(socketContext_, ZMQ_SUB);
+				chunk.path = obj["path"].get<std::string>();
+				zmq_connect(chunk.socket, chunk.path.c_str());
 				zmq_setsockopt(chunk.socket, ZMQ_SUBSCRIBE, chunk.name.c_str(), chunk.name.size());
-				auto monitorAddr = "inproc://monitor-" + chunk.name;
+
+				// 连接成功的监控
+			    auto monitorAddr = "inproc://monitor-" + chunk.name;
 				zmq_socket_monitor(chunk.socket, monitorAddr.c_str(), ZMQ_EVENT_CONNECTED);
 				zmq_pollitem_t monitor;
 				monitor.socket = zmq_socket(socketContext_, ZMQ_PAIR);
@@ -499,9 +518,12 @@ uint16_t dn::SimNode::init()
 				monitor.events = ZMQ_POLLIN;
 				monitors.emplace_back(monitor);
 			}
-			// 全部加入监听列表
-			zmq_pollitem_t item{ chunk.socket, 0, ZMQ_POLLIN };
-			pollitems_.emplace_back(item);
+			if (chunk.socket)
+			{
+				// 全部加入监听列表
+				zmq_pollitem_t item{ chunk.socket, 0, ZMQ_POLLIN };
+				pollitems_.emplace_back(item);
+			}
 		}
 		else
 			return ERR_INFO;
@@ -657,7 +679,7 @@ void dn::SimNode::addChunk(const std::string& name, void* pData, size_t size, bo
 	if (chunkSet_.count(name) > 0)
 		return;
 	chunkSet_.insert(name);
-	chunkList_.emplace_back(name, size, write, pData);
+	chunkList_.emplace_back(name, size, write, pData, "");
 }
 
 void dn::SimNode::setRecordDataFolder(const std::string& folder)
