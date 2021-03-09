@@ -106,8 +106,8 @@ void MainWindow::setAutoRecord(bool enable)
 
 void MainWindow::removeRecord(const QString& name)
 {
-	if (this->adminNode_->getSimState() >= dn::SimRun)
-		return;
+	/*if (this->adminNode_->getSimState() >= dn::SimRun)
+		return;*/
 	this->adminNode_->removeRecord(name.toStdString());
 }
 
@@ -220,6 +220,12 @@ void MainWindow::connect()
 		&SettingDialog::sendSimSpeed,
 		this,
 		&MainWindow::setSimSpeed
+	);
+	QObject::connect(
+		this->settingDialog_,
+		&SettingDialog::removeRecord,
+		this,
+		&MainWindow::removeRecord
 	);
 	QObject::connect(
 		this->settingDialog_,

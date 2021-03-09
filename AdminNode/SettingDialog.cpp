@@ -121,5 +121,9 @@ void SettingDialog::deleteRecord()
 	{
 		emit removeRecord(this->ui->recordList->currentItem()->text());
 		this->ui->recordList->removeItemWidget(this->ui->recordList->currentItem());
+		QStringList list;
+		for (auto i = 0; i < this->ui->recordList->count(); ++i)
+			list.append(this->ui->recordList->item(i)->text());
+		settings_->setValue(IniRecordList, list);
 	}
 }
