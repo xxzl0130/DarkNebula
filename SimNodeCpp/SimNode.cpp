@@ -10,13 +10,22 @@ SimNode::SimNode(const std::string& nodeName, const std::string& nodeIP, uint16_
 	qRegisterMetaType<SimData>("SimData");
 	qRegisterMetaType<uint32_t>("uint32_t");
 	// 设置回调函数
-	setSimStepCallback(std::bind(&SimNode::simStepFunc, this,std::placeholders::_1,std::placeholders::_2));
-	setSimStepBackCallback(std::bind(&SimNode::replayStepBackFunc, this,std::placeholders::_1,std::placeholders::_2));
-	setReplayStepCallback(std::bind(&SimNode::replayStepFunc, this,std::placeholders::_1,std::placeholders::_2));
-	setInitCallback(std::bind(&SimNode::simInitFunc, this));
-	setPauseCallback(std::bind(&SimNode::simPauseFunc, this));
-	setStartCallback(std::bind(&SimNode::simStartFunc, this));
-	setStopCallback(std::bind(&SimNode::simStopFunc, this));
+	setSimStepCallback([this](auto&& PH1, auto&& PH2)
+	{
+		simStepFunc(std::forward<decltype(PH1)>(PH1), std::forward<decltype(PH2)>(PH2));
+	});
+	setSimStepBackCallback([this](auto&& PH1, auto&& PH2)
+	{
+		replayStepBackFunc(std::forward<decltype(PH1)>(PH1), std::forward<decltype(PH2)>(PH2));
+	});
+	setReplayStepCallback([this](auto&& PH1, auto&& PH2)
+	{
+		replayStepFunc(std::forward<decltype(PH1)>(PH1), std::forward<decltype(PH2)>(PH2));
+	});
+	setInitCallback([this] { simInitFunc(); });
+	setPauseCallback([this] { simPauseFunc(); });
+	setStartCallback([this] { simStartFunc(); });
+	setStopCallback([this] { simStopFunc(); });
 	
 	// 添加本节点的数据块
 	this->addChunk("counter", data_, true);
