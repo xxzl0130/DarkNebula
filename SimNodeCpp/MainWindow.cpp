@@ -13,7 +13,7 @@ constexpr auto NODE_NAME = "SimNode";
 constexpr auto INI_FILENAME = "SimNode.ini";
 // 配置项默认值，对应修改
 constexpr auto NODE_IP_VALUE = "127.0.0.1";
-constexpr auto NODE_CHUNK_VALUE = dn::CHUNK_PORT; // 如果节点运行在同一台电脑上，chunk port要间隔足够的距离
+constexpr auto NODE_CHUNK_VALUE = 33333; // 如果节点运行在同一台电脑上，chunk port要间隔足够的距离
 constexpr auto NODE_SLOW_VALUE = false;
 constexpr auto ADMIN_IP_VALUE = "127.0.0.1";
 constexpr auto ADMIN_RECV_VALUE = dn::ADMIN_RECEIVE_PORT;

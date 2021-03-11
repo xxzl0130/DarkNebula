@@ -563,7 +563,11 @@ namespace DarkNebulaSharp
                         {
                             var path = obj["path"].Value<string>();
                             if (it.Path == path) // 路径没变就保持连接
+                            {
+                                ++connected;
                                 continue;
+                            }
+
                             it.Path = path;
                             Poller.Remove(it.Socket);
                             it.Socket.Dispose();
@@ -579,13 +583,13 @@ namespace DarkNebulaSharp
                         // 连接成功的监控
                         var monitor = new NetMQMonitor(it.Socket, "inproc://monitor-" + it.Name + "-" + GetUTC(), SocketEvents.Connected)
                         {
-                            Timeout = TimeSpan.FromMilliseconds(3000)
+                            Timeout = TimeSpan.FromMilliseconds(1000)
                         };
                         monitor.Connected += (s, e) =>
                         {
                             ++connected;
                         };
-                        Task.Factory.StartNew(monitor.Start);
+                        monitor.StartAsync();
                         monitors.Add(monitor);
                     }
                 }
@@ -635,7 +639,7 @@ namespace DarkNebulaSharp
 
             var t0 = System.DateTime.Now;
             var ok = false;
-            while (monitors.Count > 0 && (System.DateTime.Now - t0).TotalMilliseconds < 3000) // 等待三秒
+            while (monitors.Count > 0 && (System.DateTime.Now - t0).TotalMilliseconds < 1000) // 等待三秒
             {
                 if (connected >= subCount)
                 {
@@ -651,7 +655,19 @@ namespace DarkNebulaSharp
                 //monitor.Dispose();
             }
 
-            return (UInt16) (ok ? ErrorCode.ERR_NOP : ErrorCode.ERR_SOCKET);
+            if (!ok)
+            {
+                foreach (var it in chunkList.Where(it => !it.Own && it.Socket != null))
+                {
+                    Poller.Remove(it.Socket);
+                    it.Socket.Dispose();
+                    it.Socket = null;
+                }
+
+                return (UInt16) ErrorCode.ERR_SOCKET;
+            }
+
+            return (UInt16) ErrorCode.ERR_NOP;
         }
 
         // 发送一个数据块
