@@ -24,18 +24,12 @@ namespace DarkNebulaSharp
             InBuffer = null;
         }
 
-        ~Node()
-        {
-            StopWorking();
-            Poller?.Dispose();
-            PubSocket?.Dispose();
-        }
-
         public void Dispose()
         {
             StopWorking();
-            Poller?.Dispose();
             PubSocket?.Dispose();
+            PubSocket = null;
+            GC.SuppressFinalize(this);
         }
 
         // 发布指令的socket

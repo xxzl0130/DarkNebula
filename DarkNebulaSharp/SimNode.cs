@@ -19,10 +19,6 @@ namespace DarkNebulaSharp
         {
         }
 
-        ~SimNode()
-        {
-        }
-
         private string nodeName;
         // 节点名称
         public string NodeName
