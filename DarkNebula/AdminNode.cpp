@@ -232,6 +232,9 @@ void dn::AdminNode::initSim()
 		obj["id"] = i;
 		nodes[nodeList_[i].name] = obj;
 		nodeList_[i].init = false;
+		nodeList_[i].steps = 0;
+		if (initCallback_ != nullptr)
+			initCallback_(i);
 		if (nodeList_[i].slow)
 			++slowNodeCount_;
 	}
@@ -429,11 +432,11 @@ void dn::AdminNode::sendCommand(int id, int code, size_t size, void const* data)
 
 void dn::AdminNode::stepAdvance()
 {
-	++simSteps_;
 	stepNodeCount_ = 0;
-	curTime_ = static_cast<double>(simSteps_) * stepTime_ / 1000.0;
 	sendCommand(ALL_NODE, COMMAND_STEP_FORWARD, sizeof curTime_, &curTime_);
-	if (!simFree_ && curTime_ >= simTime_)
+	++simSteps_;
+	curTime_ = static_cast<double>(simSteps_) * stepTime_ / 1000.0;
+	if (!simFree_ && curTime_ > simTime_)
 		stopSim();
 }
 
@@ -447,7 +450,12 @@ bool dn::AdminNode::checkInit()
 
 bool dn::AdminNode::checkStep()
 {
-	return stepNodeCount_ + slowNodeCount_ >= nodeList_.size();
+	for(const auto& node : nodeList_)
+	{
+		if (!node.slow && node.steps < simSteps_)
+			return false;
+	}
+	return true;
 }
 
 void dn::AdminNode::nodeReg(char* buffer, int len)

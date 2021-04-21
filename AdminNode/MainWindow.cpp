@@ -442,20 +442,7 @@ void MainWindow::nodeRegisterCallback(int node)
 
 void MainWindow::nodeInitOverCallback(int node)
 {
-	if(node == dn::ALL_NODE)
-	{
-		for(auto i = 0;i < this->adminNode_->getNodeCount();++i)
-		{
-			this->nodeInitOver(i);
-		}
-	}
-	auto* item = this->ui->nodeTree->topLevelItem(node);
-	if (item == nullptr)
-		return;
-	if(this->adminNode_->getNodeList()[node].init)
-		item->setData(2, Qt::DisplayRole, u8"¡Ì");
-	else
-		item->setData(2, Qt::DisplayRole, u8" ");
+	updateNodeTree();
 }
 
 void MainWindow::nodeAdvanceCallback(int node)
