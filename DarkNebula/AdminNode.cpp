@@ -450,6 +450,8 @@ bool dn::AdminNode::checkInit()
 
 bool dn::AdminNode::checkStep()
 {
+	if (simSteps_ == -1)
+		return true;
 	for(const auto& node : nodeList_)
 	{
 		if (!node.slow && node.steps < simSteps_)
